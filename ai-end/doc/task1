@@ -1,0 +1,59 @@
+# Role
+你是一名资深的 Java 后端架构师，精通 Spring Boot 3.x, MyBatis-Plus, Hutool 工具包以及 MySQL 数据库设计。
+
+# Project Context
+我们要开发一个名为“社区时间银行（TimeBank）”的助老志愿服务平台。核心逻辑是：志愿者通过服务老人赚取“时间币”，老人通过“时间币”购买服务。
+当前处于【开发阶段一】，目标是搭建项目基础架构，并实现用户体系。
+
+# Task Description
+请帮我完成以下后端代码的编写：
+
+## 1. 基础设施搭建
+* 配置 Spring Boot 项目基础结构。
+* 配置 MySQL 数据库连接（Druid连接池）。
+* 配置 MyBatis-Plus，开启驼峰命名映射，配置分页插件。
+* 集成 Knife4j (Swagger) 用于接口文档生成。
+* **统一规范**：
+    * 使用 `Result<T>` 泛型类封装统一的 API 返回格式（code, msg, data）。
+    * 配置全局异常处理器（GlobalExceptionHandler），拦截业务异常并返回标准错误信息。
+    * 使用 Lombok 简化实体类。
+
+## 2. 数据库设计与实体生成
+请设计并创建 `sys_user` 表的实体类（Entity），包含以下核心字段：
+* 基础字段：id (主键), username, password (加密存储), nickname, mobile, avatar.
+* 业务字段：
+    * `id_card`: 身份证号 (用于计算年龄)。
+    * `role`: 角色标识 (String类型，"ELDERLY"代表老人, "VOLUNTEER"代表志愿者)。
+    * `balance`: 时间币余额 (Integer, 默认为0)。
+    * `status`: 账号状态 (1正常, 0冻结)。
+* 审计字段：create_time, update_time (自动填充)。
+
+## 3. 业务逻辑实现 (Service Layer)
+请实现 `AuthService` 和 `UserService`，包含以下核心逻辑：
+
+### A. 用户注册 (Register)
+* **输入**：手机号、密码、昵称、身份证号。
+* **逻辑校验**：
+    1.  检查手机号是否已存在，若存在抛出异常。
+    2.  利用 Hutool 工具包从“身份证号”中解析出“出生年份”。
+* **角色判定与赠币策略**：
+    1.  计算当前年龄。
+    2.  **若年龄 >= 60 岁**：
+        * 设置 `role` 为 "ELDERLY"。
+        * **福利触发**：自动将 `balance` 初始化为 500 (初始养老补贴)。
+    3.  **若年龄 < 60 岁**：
+        * 设置 `role` 为 "VOLUNTEER"。
+        * 设置 `balance` 初始化为 0。
+* **存储**：密码需进行 BCrypt 或 MD5 加密后存入数据库。
+
+### B. 用户登录 (Login)
+* **输入**：手机号、密码。
+* **逻辑**：校验账号密码，若成功生成 Token (可以使用简单的 UUID 或 JWT)，返回用户信息及 Token。
+
+### C. 查询个人信息 (Me)
+* 根据 Token 获取当前登录用户的详细信息，包括余额和角色。
+
+## Requirements
+1.  代码必须包含详细的中文注释。
+2.  Controller 层只需定义结构，重点在于 Service 层的业务逻辑实现。
+3.  请确保代码符合 RESTful 风格。

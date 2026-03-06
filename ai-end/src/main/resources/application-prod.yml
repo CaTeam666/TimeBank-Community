@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: ai-end
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: WARN
+    com.example.aiend: INFO

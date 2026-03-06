@@ -1,0 +1,57 @@
+package com.example.aiend.dto.request;
+
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+/**
+ * 商品创建请求DTO
+ *
+ * @author AI-End Team
+ * @since 2024-12-27
+ */
+@Data
+public class ProductCreateDTO {
+
+    /**
+     * 商品名称
+     */
+    @NotBlank(message = "商品名称不能为空")
+    private String name;
+
+    /**
+     * 商品描述
+     */
+    private String description;
+
+    /**
+     * 图片URL
+     */
+    private String image;
+
+    /**
+     * 兑换所需时间币
+     */
+    @NotNull(message = "商品价格不能为空")
+    @Min(value = 1, message = "商品价格必须大于0")
+    private Integer price;
+
+    /**
+     * 库存数量
+     */
+    @NotNull(message = "库存数量不能为空")
+    @Min(value = 0, message = "库存数量不能为负数")
+    private Integer stock;
+
+    /**
+     * 商品分类（粮油副食/日用百货/医疗健康/虚拟券卡）
+     */
+    @NotBlank(message = "商品分类不能为空")
+    private String category;
+
+    /**
+     * 状态 (ON_SHELF/OFF_SHELF)，默认上架
+     */
+    private String status = "ON_SHELF";
+}

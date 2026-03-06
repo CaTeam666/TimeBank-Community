@@ -1,0 +1,88 @@
+# AI-End 项目操作指令
+
+## 项目启动
+
+### 方式1：直接运行JAR包（推荐）
+```powershell
+cd e:\AI-final\ai-end
+mvn spring-boot:run
+```
+
+### 方式2：后台运行
+```powershell
+cd e:\AI-final\ai-end
+Start-Process java -ArgumentList "-jar", "target\ai-end-1.0.0.jar" -NoNewWindow
+```
+
+### 方式3：编译并启动
+```powershell
+cd e:\AI-final\ai-end
+mvn clean package -DskipTests
+java -jar target\ai-end-1.0.0.jar
+```
+
+---
+
+## 项目停止
+
+### 方式1：查找并终止进程（推荐）
+```powershell
+# 1. 查找占用8080端口的进程
+netstat -ano | findstr :8080
+
+# 2. 记下PID，然后终止进程（替换下面的 PID 为实际进程号）
+taskkill /F /PID <PID>
+```
+
+**示例：**
+```powershell
+# 查找进程
+netstat -ano | findstr :8080
+# 输出: TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    28860
+
+# 终止进程
+taskkill /F /PID 28860
+```
+
+### 方式2：终止所有Java进程（慎用）
+```powershell
+taskkill /F /IM java.exe
+```
+
+### 方式3：在IDE中停止
+- **IntelliJ IDEA / VS Code**: 按 `Ctrl + F2` 或点击红色停止按钮 ⏹️
+- **Eclipse**: 点击红色方块停止按钮
+
+---
+
+## 常用操作
+
+### 检查项目是否运行
+```powershell
+netstat -ano | findstr :8080
+```
+
+### 测试接口
+```powershell
+# Hello World接口
+Invoke-WebRequest -Uri "http://localhost:8080/hello" -UseBasicParsing
+
+# 用户列表接口
+Invoke-WebRequest -Uri "http://localhost:8080/users?page=1&pageSize=10" -UseBasicParsing
+```
+
+### 重新编译项目
+```powershell
+cd e:\AI-final\ai-end
+mvn clean package -DskipTests
+```
+
+---
+
+## 项目信息
+
+- **运行端口**: 8080
+- **Java版本**: 17
+- **构建工具**: Maven
+- **启动类**: AiEndApplication
+- **JAR包路径**: target\ai-end-1.0.0.jar
