@@ -1,0 +1,29 @@
+# My Orders API Implementation
+
+## Goal Description
+Implement APIs to fetch the user's accepted orders (我的接单) and published orders (我的发布) for the TaskOrders page.
+
+## Proposed Changes
+
+### Documentation
+#### [NEW] [个人页面接口文档.md](file:///c:/Users/CaTeam/Desktop/timebank-family/doc/个人页面接口文档.md)
+- `GET /api/task/my/accepted` - Get tasks where current user is the volunteer
+- `GET /api/task/my/published` - Get tasks where current user is the publisher
+
+#### [MODIFY] [数据库现有表详情 copy.md](file:///c:/Users/CaTeam/Desktop/timebank-family/doc/数据库现有表详情 copy.md)
+- Document query operations for `tb_task` by `volunteer_id` and `publisher_id`
+
+### Services
+#### [MODIFY] [taskApi.ts](file:///c:/Users/CaTeam/Desktop/timebank-family/services/taskApi.ts)
+- Add `getMyAcceptedOrders(userId, status?)` 
+- Add `getMyPublishedOrders(userId, status?)`
+
+### Pages
+#### [MODIFY] [TaskOrders.tsx](file:///c:/Users/CaTeam/Desktop/timebank-family/pages/TaskOrders.tsx)
+- Replace local context filter with API calls
+- Add loading state and error handling
+
+## Verification Plan
+### Manual Verification
+- Navigate to Profile > My Orders
+- Verify "我接的单" and "我发的单" tabs display data from API
