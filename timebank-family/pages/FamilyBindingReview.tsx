@@ -145,14 +145,23 @@ export default function FamilyBindingReview() {
                                 <div className="mb-4">
                                     <div className="flex items-center gap-1 text-sm text-gray-600 mb-2">
                                         <ImageIcon size={14} />
-                                        <span>证明材料</span>
+                                        <span>证明材料 (至少2张)</span>
                                     </div>
-                                    <img
-                                        src={request.proofImg}
-                                        alt="证明材料"
-                                        className="w-full max-w-xs rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
-                                        onClick={() => window.open(request.proofImg, '_blank')}
-                                    />
+                                    <div className="grid grid-cols-2 gap-2 max-w-sm">
+                                        {request.proofImg.split(',').map((url, idx) => (
+                                            <div 
+                                                key={idx} 
+                                                className="aspect-[4/3] rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                                                onClick={() => window.open(url.trim(), '_blank')}
+                                            >
+                                                <img
+                                                    src={url.trim()}
+                                                    alt={`证明材料-${idx + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 

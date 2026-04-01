@@ -35,7 +35,16 @@ public class SettingsServiceImpl implements SettingsService {
     private static final String KEY_ELDER_INITIAL_COINS = "elder_initial_coins";
     private static final String KEY_DAILY_SIGN_IN_REWARD = "daily_sign_in_reward";
     private static final String KEY_MONTHLY_RANK_1_REWARD = "monthly_rank_1_reward";
+    private static final String KEY_MONTHLY_RANK_2_REWARD = "monthly_rank_2_reward";
+    private static final String KEY_MONTHLY_RANK_3_REWARD = "monthly_rank_3_reward";
+    private static final String KEY_MONTHLY_RANK_4_REWARD = "monthly_rank_4_reward";
+    private static final String KEY_MONTHLY_RANK_5_REWARD = "monthly_rank_5_reward";
     private static final String KEY_TRANSACTION_FEE_PERCENT = "transaction_fee_percent";
+    private static final String KEY_ZOMBIE_TASK_TIMEOUT_HOURS = "zombie_task_timeout_hours";
+    private static final String KEY_TASK_AUTO_ACCEPT_DAYS = "task_auto_accept_days";
+    private static final String KEY_FAMILY_BINDING_MAX_LIMIT = "family_binding_max_limit";
+    private static final String KEY_PROXY_DAILY_ACTION_LIMIT = "proxy_daily_action_limit";
+    private static final String KEY_ORDER_CANCEL_TIMEOUT_HOURS = "order_cancel_timeout_hours";
     
     /**
      * 获取所有系统配置
@@ -57,10 +66,19 @@ public class SettingsServiceImpl implements SettingsService {
         
         // 构建返回对象
         SystemSettingsDTO dto = new SystemSettingsDTO();
-        dto.setElderInitialCoins(parseIntOrDefault(configMap.get(KEY_ELDER_INITIAL_COINS), 0));
-        dto.setDailySignInReward(parseIntOrDefault(configMap.get(KEY_DAILY_SIGN_IN_REWARD), 0));
-        dto.setMonthlyRank1Reward(parseIntOrDefault(configMap.get(KEY_MONTHLY_RANK_1_REWARD), 0));
+        dto.setElderInitialCoins(parseIntOrDefault(configMap.get(KEY_ELDER_INITIAL_COINS), 100));
+        dto.setDailySignInReward(parseIntOrDefault(configMap.get(KEY_DAILY_SIGN_IN_REWARD), 5));
+        dto.setMonthlyRank1Reward(parseIntOrDefault(configMap.get(KEY_MONTHLY_RANK_1_REWARD), 500));
+        dto.setMonthlyRank2Reward(parseIntOrDefault(configMap.get(KEY_MONTHLY_RANK_2_REWARD), 300));
+        dto.setMonthlyRank3Reward(parseIntOrDefault(configMap.get(KEY_MONTHLY_RANK_3_REWARD), 100));
+        dto.setMonthlyRank4Reward(parseIntOrDefault(configMap.get(KEY_MONTHLY_RANK_4_REWARD), 50));
+        dto.setMonthlyRank5Reward(parseIntOrDefault(configMap.get(KEY_MONTHLY_RANK_5_REWARD), 30));
         dto.setTransactionFeePercent(parseIntOrDefault(configMap.get(KEY_TRANSACTION_FEE_PERCENT), 0));
+        dto.setZombieTaskTimeoutHours(parseIntOrDefault(configMap.get(KEY_ZOMBIE_TASK_TIMEOUT_HOURS), 24));
+        dto.setTaskAutoAcceptDays(parseIntOrDefault(configMap.get(KEY_TASK_AUTO_ACCEPT_DAYS), 3));
+        dto.setFamilyBindingMaxLimit(parseIntOrDefault(configMap.get(KEY_FAMILY_BINDING_MAX_LIMIT), 3));
+        dto.setProxyDailyActionLimit(parseIntOrDefault(configMap.get(KEY_PROXY_DAILY_ACTION_LIMIT), 5));
+        dto.setOrderCancelTimeoutHours(parseIntOrDefault(configMap.get(KEY_ORDER_CANCEL_TIMEOUT_HOURS), 24));
         
         log.info("获取系统配置成功：{}", dto);
         return dto;
@@ -88,8 +106,35 @@ public class SettingsServiceImpl implements SettingsService {
         if (settingsDTO.getMonthlyRank1Reward() != null) {
             updateConfigValue(KEY_MONTHLY_RANK_1_REWARD, String.valueOf(settingsDTO.getMonthlyRank1Reward()));
         }
+        if (settingsDTO.getMonthlyRank2Reward() != null) {
+            updateConfigValue(KEY_MONTHLY_RANK_2_REWARD, String.valueOf(settingsDTO.getMonthlyRank2Reward()));
+        }
+        if (settingsDTO.getMonthlyRank3Reward() != null) {
+            updateConfigValue(KEY_MONTHLY_RANK_3_REWARD, String.valueOf(settingsDTO.getMonthlyRank3Reward()));
+        }
+        if (settingsDTO.getMonthlyRank4Reward() != null) {
+            updateConfigValue(KEY_MONTHLY_RANK_4_REWARD, String.valueOf(settingsDTO.getMonthlyRank4Reward()));
+        }
+        if (settingsDTO.getMonthlyRank5Reward() != null) {
+            updateConfigValue(KEY_MONTHLY_RANK_5_REWARD, String.valueOf(settingsDTO.getMonthlyRank5Reward()));
+        }
         if (settingsDTO.getTransactionFeePercent() != null) {
             updateConfigValue(KEY_TRANSACTION_FEE_PERCENT, String.valueOf(settingsDTO.getTransactionFeePercent()));
+        }
+        if (settingsDTO.getZombieTaskTimeoutHours() != null) {
+            updateConfigValue(KEY_ZOMBIE_TASK_TIMEOUT_HOURS, String.valueOf(settingsDTO.getZombieTaskTimeoutHours()));
+        }
+        if (settingsDTO.getTaskAutoAcceptDays() != null) {
+            updateConfigValue(KEY_TASK_AUTO_ACCEPT_DAYS, String.valueOf(settingsDTO.getTaskAutoAcceptDays()));
+        }
+        if (settingsDTO.getFamilyBindingMaxLimit() != null) {
+            updateConfigValue(KEY_FAMILY_BINDING_MAX_LIMIT, String.valueOf(settingsDTO.getFamilyBindingMaxLimit()));
+        }
+        if (settingsDTO.getProxyDailyActionLimit() != null) {
+            updateConfigValue(KEY_PROXY_DAILY_ACTION_LIMIT, String.valueOf(settingsDTO.getProxyDailyActionLimit()));
+        }
+        if (settingsDTO.getOrderCancelTimeoutHours() != null) {
+            updateConfigValue(KEY_ORDER_CANCEL_TIMEOUT_HOURS, String.valueOf(settingsDTO.getOrderCancelTimeoutHours()));
         }
         
         log.info("系统配置更新成功");

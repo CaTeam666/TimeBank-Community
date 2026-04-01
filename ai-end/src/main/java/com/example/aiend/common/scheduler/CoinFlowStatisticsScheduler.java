@@ -1,12 +1,16 @@
 package com.example.aiend.common.scheduler;
 
+import com.example.aiend.entity.DailyCoinStats;
 import com.example.aiend.mapper.CoinLogMapper;
+import com.example.aiend.mapper.DailyCoinStatsMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -26,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 public class CoinFlowStatisticsScheduler {
 
     private final CoinLogMapper coinLogMapper;
+    private final DailyCoinStatsMapper dailyCoinStatsMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
     /**

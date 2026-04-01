@@ -13,8 +13,9 @@ export default function TaskPublish() {
     const { state, dispatch } = useAuth();
     const { addTask } = useTasks();
 
-    // Always use current logged-in user
-    const currentUser = state.currentUser;
+    // 代理模式下使用老人身份，正常模式用自己
+    const currentUser = state.isProxyMode && state.proxyTarget
+        ? state.proxyTarget : state.currentUser;
 
     // Default to today
     const today = new Date().toISOString().split('T')[0];

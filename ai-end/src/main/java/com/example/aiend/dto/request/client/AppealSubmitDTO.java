@@ -32,4 +32,11 @@ public class AppealSubmitDTO {
      */
     @NotBlank(message = "申诉理由不能为空")
     private String reason;
+    
+    /**
+     * 申诉证据图片URL
+     */
+    @NotBlank(message = "申诉证据图片不能为空")
+    @JsonAlias({"evidence_img", "evidenceImg"})
+    private String evidenceImg;
 }

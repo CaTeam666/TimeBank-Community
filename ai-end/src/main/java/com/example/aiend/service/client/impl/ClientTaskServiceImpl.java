@@ -137,8 +137,8 @@ public class ClientTaskServiceImpl implements ClientTaskService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public TaskPublishResponseDTO publishTask(TaskPublishDTO publishDTO, Long publisherId) {
-        log.info("发布任务，发布者ID：{}，任务标题：{}", publisherId, publishDTO.getTitle());
+    public TaskPublishResponseDTO publishTask(TaskPublishDTO publishDTO, Long publisherId, Long proxyUserId) {
+        log.info("发布任务，发布者ID：{}，代理人ID：{}，任务标题：{}", publisherId, proxyUserId, publishDTO.getTitle());
         
         // 查询发布者信息
         User publisher = userMapper.selectById(String.valueOf(publisherId));
@@ -171,6 +171,7 @@ public class ClientTaskServiceImpl implements ClientTaskService {
         task.setPrice(publishDTO.getCoins());
         task.setLocation(publishDTO.getLocation());
         task.setPublisherId(publisherId);
+        task.setProxyUserId(proxyUserId);  // 记录代理人ID（非代理发布为null）
         task.setStatus(0);  // 待接取
         task.setServiceTime(serviceTime);
         task.setCreateTime(LocalDateTime.now());
@@ -940,10 +941,13 @@ public class ClientTaskServiceImpl implements ClientTaskService {
     public List<MyPublishedTaskDTO> getMyPublishedTasks(Long userId, Integer status) {
         log.info("获取我的发布列表，用户ID：{}，状态筛选：{}", userId, status);
         
-        // 构建查询条件
+        // 查询条件：发布者本人 OR 代理发布的任务
         LambdaQueryWrapper<Task> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Task::getPublisherId, userId)
-                .orderByDesc(Task::getCreateTime);
+        queryWrapper.and(w -> w
+                .eq(Task::getPublisherId, userId)
+                .or()
+                .eq(Task::getProxyUserId, userId)
+        ).orderByDesc(Task::getCreateTime);
         
         // 如果指定了状态，添加状态过滤
         if (status != null) {
@@ -1289,8 +1293,8 @@ public class ClientTaskServiceImpl implements ClientTaskService {
             throw new BusinessException(404, "任务不存在");
         }
         
-        // 2. 校验是否为发布者
-        if (!publisherId.equals(task.getPublisherId())) {
+        // 2. 校验是否为发布者或代理人
+        if (!publisherId.equals(task.getPublisherId()) && !publisherId.equals(task.getProxyUserId())) {
             throw new BusinessException(403, "无权操作此任务");
         }
         
@@ -1464,7 +1468,7 @@ public class ClientTaskServiceImpl implements ClientTaskService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean submitAppeal(Long taskId, Long userId, String reason) {
+    public boolean submitAppeal(Long taskId, Long userId, String reason, String evidenceImg) {
         log.info("提交申诉，任务ID：{}，用户ID：{}", taskId, userId);
         
         // 1. 查询任务
@@ -1500,8 +1504,11 @@ public class ClientTaskServiceImpl implements ClientTaskService {
         Appeal appeal = new Appeal();
         appeal.setTaskId(taskId);
         appeal.setProposerId(userId);
+        appeal.setType("其他"); // 设置默认类型，避免数据库非空约束报错
         appeal.setReason(reason);
+        appeal.setEvidenceImg(evidenceImg);
         appeal.setStatus(0);  // 0:待处理
+        appeal.setIsDeleted(0);
         appeal.setCreateTime(LocalDateTime.now());
         appeal.setUpdateTime(LocalDateTime.now());
         
@@ -1537,7 +1544,7 @@ public class ClientTaskServiceImpl implements ClientTaskService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean replyAppeal(Long taskId, Long userId, String content) {
+    public boolean replyAppeal(Long taskId, Long userId, String content, String evidenceImg) {
         log.info("提交申诉回应，任务ID：{}，用户ID：{}", taskId, userId);
         
         // 1. 查询任务
@@ -1576,8 +1583,9 @@ public class ClientTaskServiceImpl implements ClientTaskService {
             throw new BusinessException(400, "已经回应过，不能重复回应");
         }
         
-        // 7. 更新申诉记录
+        // 7. 更新申诉回应
         appeal.setDefendantResponse(content);
+        appeal.setDefendantEvidenceImg(evidenceImg);
         appeal.setResponseTime(LocalDateTime.now());
         appeal.setUpdateTime(LocalDateTime.now());
         
@@ -1660,9 +1668,11 @@ public class ClientTaskServiceImpl implements ClientTaskService {
                 .proposerName(proposerName)
                 .proposerAvatar(proposerAvatar)
                 .reason(appeal.getReason())
+                .evidenceImg(appeal.getEvidenceImg())
                 .defendantName(defendantName)
                 .defendantAvatar(defendantAvatar)
                 .defendantResponse(appeal.getDefendantResponse())
+                .defendantEvidenceImg(appeal.getDefendantEvidenceImg())
                 .responseTime(responseTimeStr)
                 .status(appeal.getStatus())
                 .createTime(createTimeStr)

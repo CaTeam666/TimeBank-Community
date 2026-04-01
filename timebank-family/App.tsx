@@ -4,7 +4,9 @@ import { AuthProvider } from './context/AuthContext';
 import { TaskProvider } from './context/TaskContext';
 import { MallProvider } from './context/MallContext';
 import { MessageProvider } from './context/MessageContext';
+import { UIProvider } from './context/UIContext';
 import { Layout } from './components/Layout';
+
 import { RewardPopup } from './components/RewardPopup';
 
 import Login from './pages/Login';
@@ -30,7 +32,9 @@ const App = () => {
   return (
     <AuthProvider>
       <MessageProvider>
-        <TaskProvider>
+        <UIProvider>
+          <TaskProvider>
+
           <MallProvider>
             <HashRouter>
               <Layout>
@@ -70,9 +74,11 @@ const App = () => {
               </Layout>
             </HashRouter>
           </MallProvider>
-        </TaskProvider>
+          </TaskProvider>
+        </UIProvider>
       </MessageProvider>
     </AuthProvider>
+
   );
 };
 

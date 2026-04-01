@@ -30,7 +30,7 @@ public interface ClientTaskService {
      * @param publisherId 发布者ID
      * @return 发布响应（包含任务ID）
      */
-    TaskPublishResponseDTO publishTask(TaskPublishDTO publishDTO, Long publisherId);
+    TaskPublishResponseDTO publishTask(TaskPublishDTO publishDTO, Long publisherId, Long proxyUserId);
     
     /**
      * 获取任务大厅列表
@@ -179,9 +179,10 @@ public interface ClientTaskService {
      * @param taskId    任务ID
      * @param userId    申诉发起人 ID
      * @param reason    申诉理由
+     * @param evidenceImg 申诉证据图片URL
      * @return 是否提交成功
      */
-    boolean submitAppeal(Long taskId, Long userId, String reason);
+    boolean submitAppeal(Long taskId, Long userId, String reason, String evidenceImg);
     
     /**
      * 提交申诉回应
@@ -190,9 +191,10 @@ public interface ClientTaskService {
      * @param taskId   任务ID
      * @param userId   回应人ID
      * @param content  回应内容
+     * @param evidenceImg 回应证据图片URL
      * @return 是否提交成功
      */
-    boolean replyAppeal(Long taskId, Long userId, String content);
+    boolean replyAppeal(Long taskId, Long userId, String content, String evidenceImg);
     
     /**
      * 获取申诉详情

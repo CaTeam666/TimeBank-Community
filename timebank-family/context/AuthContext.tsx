@@ -32,7 +32,9 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
       };
     case 'LOGOUT':
       localStorage.removeItem('token');
+      localStorage.removeItem('proxyToken');
       // user removal handled by effect
+
       return {
         ...initialState,
         currentUser: null,

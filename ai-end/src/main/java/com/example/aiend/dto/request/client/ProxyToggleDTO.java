@@ -13,9 +13,9 @@ import lombok.Data;
 public class ProxyToggleDTO {
     
     /**
-     * 长者用户ID（为null时退出代理模式）
+     * 长者用户ID（为null时退出代理模式，使用String避免JS大整数精度丢失）
      */
-    private Long parentId;
+    private String parentId;
     
     /**
      * 是否开启代理模式（true:开启 false:关闭）

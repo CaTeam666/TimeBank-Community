@@ -1,6 +1,7 @@
 package com.example.aiend.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.example.aiend.common.enums.MessageTypeEnum;
 import com.example.aiend.common.enums.TaskStatusEnum;
 import com.example.aiend.entity.CoinLog;
 import com.example.aiend.entity.Task;
@@ -11,6 +12,7 @@ import com.example.aiend.mapper.TaskMapper;
 import com.example.aiend.mapper.UserMapper;
 import com.example.aiend.mapper.ZombieTaskLogMapper;
 import com.example.aiend.service.AnomalyService;
+import com.example.aiend.service.MessageService;
 import com.example.aiend.vo.ZombieTaskLogVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +42,7 @@ public class AnomalyServiceImpl implements AnomalyService {
     private final UserMapper userMapper;
     private final CoinLogMapper coinLogMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final MessageService messageService;
 
     /**
      * Redis 任务分类 ZSet Key 前缀
@@ -173,6 +176,138 @@ public class AnomalyServiceImpl implements AnomalyService {
 
         } catch (Exception e) {
             log.error("处理僵尸任务失败，任务ID：{}", task.getId(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 处理待验收任务自动完成
+     * 1. 扣除发布者冻结时间币
+     * 2. 增加志愿者时间币
+     * 3. 记录流水
+     * 4. 更新任务状态为已完成
+     *
+     * @param task 任务实体
+     * @return 是否处理成功
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean processAutoConfirmTask(Task task) {
+        log.info("自动验收任务，任务ID：{}，标题：{}", task.getId(), task.getTitle());
+
+        try {
+            // 1. 校验任务状态（必须是待确认状态）
+            if (!TaskStatusEnum.WAITING_CONFIRM.getCode().equals(task.getStatus())) {
+                log.warn("任务状态不正确，无法自动验收，任务ID：{}，当前状态：{}", task.getId(), task.getStatus());
+                return false;
+            }
+
+            // 2. 查询相关用户
+            User publisher = userMapper.selectById(task.getPublisherId());
+            User volunteer = userMapper.selectById(task.getVolunteerId());
+
+            if (publisher == null || volunteer == null) {
+                log.error("自动验收失败，发布者或志愿者不存在，任务ID：{}", task.getId());
+                return false;
+            }
+
+            Integer coins = task.getPrice();
+
+            // 3. 扣除发布者冻结时间币
+            Integer frozenBalance = publisher.getFrozenBalance() != null ? publisher.getFrozenBalance() : 0;
+            if (frozenBalance < coins) {
+                log.error("自动验收失败，发布者冻结余额不足，任务ID：{}，用户ID：{}", task.getId(), publisher.getId());
+                return false;
+            }
+            publisher.setFrozenBalance(frozenBalance - coins);
+            publisher.setUpdateTime(LocalDateTime.now());
+            userMapper.updateById(publisher);
+
+            // 4. 增加志愿者时间币
+            Integer volunteerBalance = volunteer.getBalance() != null ? volunteer.getBalance() : 0;
+            volunteer.setBalance(volunteerBalance + coins);
+            volunteer.setUpdateTime(LocalDateTime.now());
+            userMapper.updateById(volunteer);
+
+            // 5. 记录发布者支出流水
+            CoinLog publisherLog = new CoinLog();
+            publisherLog.setUserId(task.getPublisherId());
+            publisherLog.setAmount(-coins);
+            publisherLog.setType(2); // 2:任务支出
+            publisherLog.setTaskId(task.getId());
+            publisherLog.setCreateTime(LocalDateTime.now());
+            publisherLog.setUpdateTime(LocalDateTime.now());
+            coinLogMapper.insert(publisherLog);
+
+            // 6. 记录志愿者收入流水
+            CoinLog volunteerLog = new CoinLog();
+            volunteerLog.setUserId(task.getVolunteerId());
+            volunteerLog.setAmount(coins);
+            volunteerLog.setType(1); // 1:任务收入
+            volunteerLog.setTaskId(task.getId());
+            volunteerLog.setCreateTime(LocalDateTime.now());
+            volunteerLog.setUpdateTime(LocalDateTime.now());
+            coinLogMapper.insert(volunteerLog);
+
+            // 7. 更新任务状态为已完成
+            task.setStatus(TaskStatusEnum.COMPLETED.getCode());
+            task.setUpdateTime(LocalDateTime.now());
+            taskMapper.updateById(task);
+
+            // 8. 清除Redis缓存
+            removeTaskFromRedisCache(task);
+
+            // 9. 删除对应的任务验收消息
+            messageService.deleteMessageByBizId(task.getId(), MessageTypeEnum.TASK_VERIFY.getCode());
+
+            log.info("任务自动验收成功，任务ID：{}，转账：{}", task.getId(), coins);
+            return true;
+
+        } catch (Exception e) {
+            log.error("自动验收任务过程出错，任务ID：{}", task.getId(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 处理进行中未签到任务自动取消
+     * 1. 返还发布者冻结时间币
+     * 2. 更新任务状态为已取消 (5)
+     * 3. 清除相关缓存
+     *
+     * @param task 任务实体
+     * @return 是否处理成功
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean processNoCheckInTask(Task task) {
+        log.info("自动取消未签到任务，任务ID：{}，标题：{}", task.getId(), task.getTitle());
+
+        try {
+            // 1. 校验任务状态（必须是进行中状态）
+            if (!TaskStatusEnum.IN_PROGRESS.getCode().equals(task.getStatus())) {
+                log.warn("任务状态不正确，无法自动取消，任务ID：{}，当前状态：{}", task.getId(), task.getStatus());
+                return false;
+            }
+
+            // 2. 执行退款（全额退回发布者）
+            boolean refundSuccess = executeRefund(task, task.getPrice());
+            if (!refundSuccess) {
+                log.error("自动取消失败，退款过程异常，任务ID：{}", task.getId());
+                return false;
+            }
+
+            // 3. 更新任务状态为已取消 (5)
+            task.setStatus(TaskStatusEnum.CANCELLED.getCode());
+            task.setUpdateTime(LocalDateTime.now());
+            taskMapper.updateById(task);
+
+            // 4. 清除 Redis 缓存
+            removeTaskFromRedisCache(task);
+
+            log.info("进行中未签到任务已自动取消并完成退款，任务ID：{}", task.getId());
+            return true;
+
+        } catch (Exception e) {
+            log.error("自动取消进行中任务过程出错，任务ID：{}", task.getId(), e);
             return false;
         }
     }

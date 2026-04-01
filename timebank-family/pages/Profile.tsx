@@ -11,12 +11,29 @@ import { messageApi } from '../services/messageApi';
 
 export default function Profile() {
     const { state, dispatch } = useAuth();
-    const { unreadCount } = useMessage();
+    const { unreadCount, addMessage } = useMessage();
+
     const navigate = useNavigate();
     const user = state.currentUser;
 
     const [showFreezeModal, setShowFreezeModal] = React.useState(false);
     const [messageUnreadCount, setMessageUnreadCount] = React.useState(0);
+
+    // 查看是否有新人礼包需要弹出
+    useEffect(() => {
+        const hasWelcomeFlag = localStorage.getItem('showWelcomeReward');
+        if (hasWelcomeFlag === 'true' && user?.role === UserRole.SENIOR) {
+            localStorage.removeItem('showWelcomeReward');
+            addMessage({
+                userId: user.id,
+                type: 'MONEY',
+                title: '新人特惠礼包',
+                content: '欢迎加入！您的新人初始积分已到账。',
+                link: '/user/profile'
+            });
+        }
+    }, [user, addMessage]);
+
 
 
     useEffect(() => {

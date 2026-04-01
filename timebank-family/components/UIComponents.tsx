@@ -1,7 +1,8 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, PlusCircle, Settings, ChevronLeft, User as UserIcon, ClipboardList } from 'lucide-react';
+import { Home, Users, PlusCircle, Settings, ChevronLeft, User as UserIcon, ClipboardList, CheckCircle, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
+
 import { THEME_COLOR_BG, THEME_COLOR_TEXT } from '../constants';
 
 // --- Button ---
@@ -182,23 +183,90 @@ interface ToastProps {
 export const Toast: React.FC<ToastProps> = ({ message, type = 'info', isVisible, onClose }) => {
   React.useEffect(() => {
     if (isVisible) {
-      const timer = setTimeout(onClose, 2000);
+      const timer = setTimeout(onClose, 2500);
       return () => clearTimeout(timer);
     }
   }, [isVisible, onClose]);
 
   if (!isVisible) return null;
 
-  const bgColors = {
-    success: 'bg-green-500',
-    error: 'bg-red-500',
-    info: 'bg-gray-800'
+  const config = {
+    success: { bg: 'bg-green-500', icon: <CheckCircle size={20} /> },
+    error: { bg: 'bg-red-500', icon: <AlertCircle size={20} /> },
+    info: { bg: 'bg-gray-800', icon: <Info size={20} /> }
   };
 
   return (
-    <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[70] animate-fade-in">
-      <div className={`${bgColors[type]} text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-[200px] justify-center`}>
-        <span>{message}</span>
+    <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[200] animate-fade-in-down">
+      <div className={`${config[type].bg} text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 min-w-[200px] backdrop-blur-md bg-opacity-90`}>
+        <span className="shrink-0">{config[type].icon}</span>
+        <span className="font-medium">{message}</span>
+      </div>
+    </div>
+  );
+};
+
+// --- ConfirmModal ---
+interface ConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  content: string;
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'default' | 'danger';
+}
+
+export const ConfirmModal: React.FC<ConfirmModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title, 
+  content, 
+  confirmText = '确定', 
+  cancelText = '取消',
+  type = 'default'
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div 
+        className="absolute inset-0" 
+        onClick={onClose}
+      />
+      <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl animate-bounce-in relative z-10">
+        <div className="p-8 pb-4 text-center">
+          <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${type === 'danger' ? 'bg-red-50' : 'bg-orange-50'}`}>
+            {type === 'danger' ? (
+              <AlertTriangle className="text-red-500" size={32} />
+            ) : (
+              <Info className="text-orange-500" size={32} />
+            )}
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">{title}</h3>
+          <p className="text-gray-500 text-sm leading-relaxed">{content}</p>
+        </div>
+        
+        <div className="p-6 flex gap-3">
+          <Button 
+            variant="secondary" 
+            fullWidth 
+            onClick={onClose}
+            className="rounded-2xl py-3"
+          >
+            {cancelText}
+          </Button>
+          <Button 
+            variant={type === 'danger' ? 'danger' : 'primary'}
+            fullWidth 
+            onClick={() => { onConfirm(); onClose(); }}
+            className="rounded-2xl py-3 shadow-lg shadow-orange-100"
+          >
+            {confirmText}
+          </Button>
+        </div>
       </div>
     </div>
   );

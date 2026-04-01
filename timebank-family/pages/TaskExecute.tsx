@@ -28,6 +28,8 @@ export default function TaskExecute() {
     const [showAppealModal, setShowAppealModal] = useState(false);
     const [appealReason, setAppealReason] = useState('');
     const [appealLoading, setAppealLoading] = useState(false);
+    const [appealImg, setAppealImg] = useState<string | null>(null);
+    const [appealFile, setAppealFile] = useState<File | null>(null);
 
     // Original loading states
     const [loading, setLoading] = useState(false);
@@ -45,6 +47,20 @@ export default function TaskExecute() {
                     locationDetail: data.location,
                     contactPhone: data.contactPhone || '139********'
                 });
+
+                // 恢复签到状态
+                if (data.checkInTime) {
+                    setCheckInTime(new Date(data.checkInTime).getTime());
+                } else {
+                    try {
+                        const reviewDetail = await taskApi.getReviewDetail(id);
+                        if (reviewDetail && reviewDetail.checkInTime) {
+                            setCheckInTime(new Date(reviewDetail.checkInTime).getTime());
+                        }
+                    } catch (e) {
+                        console.log('Task review detail not ready or no checkInTime returned');
+                    }
+                }
             } catch (error) {
                 console.error('Failed to fetch task', error);
                 setTask(null);
@@ -123,9 +139,18 @@ export default function TaskExecute() {
             alert("请填写申诉理由");
             return;
         }
+        if (!appealFile || !appealImg) {
+            alert("请上传申诉证据图片");
+            return;
+        }
         setAppealLoading(true);
         try {
-            await taskApi.submitAppeal(task.id, state.currentUser!.id, appealReason);
+            // 1. Upload appeal image
+            const uploadRes = await upload<string>('/file/upload', appealFile);
+            const imageUrl = typeof uploadRes === 'string' ? uploadRes : (uploadRes as any).url || String(uploadRes);
+            
+            // 2. Submit appeal with image
+            await taskApi.submitAppeal(String(task.id), String(state.currentUser!.id), appealReason, imageUrl);
             alert("申诉已提交，请等待处理");
             setShowAppealModal(false);
             navigate('/task/orders');
@@ -134,6 +159,18 @@ export default function TaskExecute() {
             alert("申诉提交失败，请重试");
         } finally {
             setAppealLoading(false);
+        }
+    };
+
+    const handleAppealFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setAppealFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setAppealImg(reader.result as string);
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -254,7 +291,34 @@ export default function TaskExecute() {
                         value={appealReason}
                         onChange={e => setAppealReason(e.target.value)}
                     />
-                    <Button fullWidth onClick={handleAppeal} variant="danger" disabled={appealLoading || !appealReason.trim()}>
+                    
+                    {/* Appeal Evidence Upload */}
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-700 font-bold">上传申诉凭证 (必填)</p>
+                        <div 
+                            onClick={() => document.getElementById('appealFileInput')?.click()}
+                            className="w-full aspect-video bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center relative overflow-hidden active:bg-gray-100 cursor-pointer"
+                        >
+                            {appealImg ? (
+                                <img src={appealImg} alt="Appeal Evidence" className="w-full h-full object-cover" />
+                            ) : (
+                                <>
+                                    <Camera size={24} className="text-gray-400 mb-1" />
+                                    <span className="text-gray-500 text-xs">点击拍照/上传图片证据</span>
+                                </>
+                            )}
+                            <input
+                                id="appealFileInput"
+                                type="file"
+                                className="hidden"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleAppealFileChange}
+                            />
+                        </div>
+                    </div>
+
+                    <Button fullWidth onClick={handleAppeal} variant="danger" disabled={appealLoading || !appealReason.trim() || !appealImg}>
                         {appealLoading ? '提交中...' : '确认提交申诉'}
                     </Button>
                 </div>

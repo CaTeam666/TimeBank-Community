@@ -3,6 +3,7 @@ const BASE_URL = '/api';
 
 interface RequestOptions extends RequestInit {
     params?: Record<string, string>;
+    skipProxy?: boolean;
 }
 
 /**
@@ -17,7 +18,7 @@ const getAuthToken = (): string | null => {
 };
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { params, ...customConfig } = options;
+    const { params, skipProxy, ...customConfig } = options;
 
     let url = `${BASE_URL}${endpoint}`;
     if (params) {
@@ -25,7 +26,8 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         url += `?${searchParams.toString()}`;
     }
 
-    const token = getAuthToken();
+    // skipProxy 为 true 时，强制使用普通 token（用于不在代理白名单中的接口）
+    const token = skipProxy ? localStorage.getItem('token') : getAuthToken();
 
     const headers = {
         'Content-Type': 'application/json',
@@ -74,21 +76,25 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     }
 }
 
-export const get = <T>(endpoint: string, params?: Record<string, string>) =>
-    request<T>(endpoint, { method: 'GET', params });
+export const get = <T>(endpoint: string, params?: Record<string, string>, skipProxy?: boolean) =>
+    request<T>(endpoint, { method: 'GET', params, skipProxy });
 
-export const post = <T>(endpoint: string, body: any) =>
-    request<T>(endpoint, { method: 'POST', body: JSON.stringify(body) });
+export const post = <T>(endpoint: string, body: any, skipProxy?: boolean) =>
+    request<T>(endpoint, { method: 'POST', body: JSON.stringify(body), skipProxy });
 
-export const upload = <T>(endpoint: string, file: File) => {
+export const upload = <T>(endpoint: string, file: File, params?: Record<string, string>) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    // Let browser set Content-Type header with boundary for FormData
-    // So we don't include Content-Type: application/json here
+    let url = `${BASE_URL}${endpoint}`;
+    if (params) {
+        const searchParams = new URLSearchParams(params);
+        url += `?${searchParams.toString()}`;
+    }
+
     const token = getAuthToken();
 
-    return fetch(`${BASE_URL}${endpoint}`, {
+    return fetch(url, {
         method: 'POST',
         headers: {
             ...(token && { Authorization: `Bearer ${token}` }),

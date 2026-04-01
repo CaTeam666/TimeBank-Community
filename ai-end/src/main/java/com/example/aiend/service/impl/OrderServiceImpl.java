@@ -218,7 +218,17 @@ public class OrderServiceImpl implements OrderService {
         log.info("用户{}时间币退还成功，退还金额：{}，当前余额：{}，剩余冻结：{}", 
                 user.getId(), amount, user.getBalance(), user.getFrozenBalance());
 
-        // 2. 更新订单状态为已取消
+        // 2. 记录退还冻结时间币的系统调整流水
+        CoinLog refundLog = new CoinLog();
+        refundLog.setUserId(order.getUserId());
+        refundLog.setAmount(amount); // 正数表示收入(退款)
+        refundLog.setType(4); // 4:系统调整(退款)
+        refundLog.setCreateTime(LocalDateTime.now());
+        refundLog.setUpdateTime(LocalDateTime.now());
+        coinLogMapper.insert(refundLog);
+        log.info("商品兑换订单取消，退款流水记录成功，userId：{}，amount：+{}", order.getUserId(), amount);
+
+        // 3. 更新订单状态为已取消
         order.setStatus(OrderStatusEnum.CANCELLED.getCode());
         order.setUpdateTime(LocalDateTime.now());
         orderMapper.updateById(order);

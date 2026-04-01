@@ -334,6 +334,8 @@ public class ArbitrationServiceImpl implements ArbitrationService {
         vo.setType(appeal.getType());
         vo.setDescription(appeal.getReason());
         vo.setDefendantResponse(appeal.getDefendantResponse());
+        vo.setDefendantEvidenceImg(appeal.getDefendantEvidenceImg());
+        vo.setDefendantEvidenceImages(parseEvidenceImages(appeal.getDefendantEvidenceImg()));
         
         // 转换状态
         AppealStatusEnum statusEnum = AppealStatusEnum.fromCode(appeal.getStatus());

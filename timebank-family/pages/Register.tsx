@@ -1,14 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useUI } from '../context/UIContext';
 import { Input, Button, NavBar, Modal } from '../components/UIComponents';
+
 import { authService } from '../services/authService';
 import { UserRole } from '../types';
-import { Camera, CheckCircle, Upload, User, UserPlus, Users, Clock, ShieldAlert } from 'lucide-react';
+import { Camera, CheckCircle, Upload, User, UserPlus, Users, Clock, ShieldAlert, ArrowRight } from 'lucide-react';
+import { calculateAge } from '../utils/idCardUtils';
+import { AgeVerificationModal } from '../components/AgeVerificationModal';
+
 
 export default function Register() {
   const navigate = useNavigate();
   const { dispatch } = useAuth();
+  const { showToast } = useUI();
+
 
   // Steps: 1 = Basic Info, 2 = Role & ID
   const [step, setStep] = useState(1);
@@ -43,9 +50,18 @@ export default function Register() {
   const [auditStatus, setAuditStatus] = useState<number>(0); // 0=Pending, 1=Pass, 2=Reject
   const [rejectReason, setRejectReason] = useState<string>('');
   const [polling, setPolling] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
 
-  // Modal State
-  const [showSeniorModal, setShowSeniorModal] = useState(false);
+  // Uploaded URLs
+  const [frontUrl, setFrontUrl] = useState<string | null>(null);
+  const [backUrl, setBackUrl] = useState<string | null>(null);
+
+
+  // Age Verification Modal State
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  const [detectedAge, setDetectedAge] = useState(0);
+
+
 
   // Polling Effect
   useEffect(() => {
@@ -59,12 +75,11 @@ export default function Register() {
             setPolling(false);
             // Handle Success
             if (role === UserRole.SENIOR) {
-              setShowSeniorModal(true);
-              dispatch({ type: 'LOGIN', payload: res.user });
-            } else {
-              dispatch({ type: 'LOGIN', payload: res.user });
-              setTimeout(() => navigate('/user/profile'), 1500);
+              localStorage.setItem('showWelcomeReward', 'true');
             }
+            dispatch({ type: 'LOGIN', payload: res.user });
+            setTimeout(() => navigate('/user/profile'), 1500);
+
           } else if (res.status === 2) { // Rejected
             setAuditStatus(2);
             setRejectReason(res.reject_reason || '您的实名信息未通过审核，请检查后重新提交');
@@ -82,9 +97,16 @@ export default function Register() {
   // Handlers
   const handleNextStep = () => {
     if (formData.phone && formData.password && formData.nickname) {
+      if (formData.phone.length !== 11) {
+        showToast('请输入正确的11位手机号', 'error');
+        return;
+      }
       setStep(2);
+    } else {
+      showToast('请填写完整基本信息', 'info');
     }
   };
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isFront: boolean) => {
     const file = e.target.files?.[0];
@@ -92,13 +114,14 @@ export default function Register() {
 
     // Validation
     if (file.size > 5 * 1024 * 1024) {
-      alert("图片大小不能超过 5MB");
+      showToast("图片大小不能超过 5MB", "error");
       return;
     }
     if (!file.type.startsWith('image/')) {
-      alert("请上传图片文件");
+      showToast("请上传图片文件", "error");
       return;
     }
+
 
     console.log(`Select File (${isFront ? 'Front' : 'Back'}):`, file.name, file.size, file.type);
 
@@ -108,12 +131,36 @@ export default function Register() {
 
     // Convert to Base64/URL for preview
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const result = reader.result as string;
       if (isFront) {
         setIdImageFront(result);
+        // Trigger OCR for front side
+        try {
+          setOcrLoading(true);
+          const url = await authService.uploadImage(file, 'oss');
+          setFrontUrl(url);
+          const ocrData = await authService.ocrIdCard(url, 'face');
+          if (ocrData.name || ocrData.idNum) {
+            setIdInfo({
+              realName: ocrData.name || idInfo.realName,
+              idCard: ocrData.idNum || idInfo.idCard
+            });
+          }
+        } catch (err) {
+          console.error("OCR Failed", err);
+        } finally {
+          setOcrLoading(false);
+        }
       } else {
         setIdImageBack(result);
+        // Just upload for back side to avoid upload during register step
+        try {
+          const url = await authService.uploadImage(file, 'oss');
+          setBackUrl(url);
+        } catch (err) {
+          console.error("Back side upload failed", err);
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -126,12 +173,27 @@ export default function Register() {
   const handleRegister = async () => {
     if (!role || !frontFile || !backFile) return;
 
+    // --- Age Check for SENIOR role ---
+    if (role === UserRole.SENIOR) {
+      const age = calculateAge(idInfo.idCard);
+      if (age !== -1 && age < 60) {
+        setDetectedAge(age);
+        setShowAgeModal(true);
+        return; // Intercept registration
+      }
+    }
+
     try {
+
       setLoading(true);
 
-      // 1. Upload Images first
-      const frontUrl = await authService.uploadImage(frontFile);
-      const backUrl = await authService.uploadImage(backFile);
+      // 1. Upload Images if not already uploaded
+      const finalFrontUrl = frontUrl || (frontFile ? await authService.uploadImage(frontFile, 'oss') : null);
+      const finalBackUrl = backUrl || (backFile ? await authService.uploadImage(backFile, 'oss') : null);
+
+      if (!finalFrontUrl || !finalBackUrl) {
+        throw new Error('请先上传身份证正反面照片');
+      }
 
       // 2. Submit Register with URLs
       const res = await authService.register({
@@ -139,8 +201,8 @@ export default function Register() {
         role: role,
         realName: idInfo.realName,
         idCard: idInfo.idCard,
-        idCardFront: frontUrl,
-        idCardBack: backUrl
+        idCardFront: finalFrontUrl,
+        idCardBack: finalBackUrl
       });
 
       setAuditId(res.auditId);
@@ -148,15 +210,19 @@ export default function Register() {
       setPolling(true);
 
     } catch (error: any) {
-      alert(error.message || '注册失败');
+      showToast(error.message || '注册失败', 'error');
     } finally {
       setLoading(false);
     }
+
   };
 
-  const handleSeniorClaim = () => {
-    navigate('/user/profile');
+  const handleSwitchToVolunteer = () => {
+    setRole(UserRole.VOLUNTEER);
+    setShowAgeModal(false);
+    // After switching, the user can click Register again
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 pb-8">
@@ -267,7 +333,12 @@ export default function Register() {
                 onClick={() => frontInputRef.current?.click()}
                 className="aspect-[1.6] bg-gray-50 border border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 relative overflow-hidden"
               >
-                {idImageFront ? (
+                {ocrLoading ? (
+                  <div className="flex flex-col items-center">
+                    <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+                    <span className="text-xs text-orange-500">正在识别身份...</span>
+                  </div>
+                ) : idImageFront ? (
                   <img src={idImageFront} className="w-full h-full object-cover" />
                 ) : (
                   <>
@@ -347,29 +418,14 @@ export default function Register() {
         </div>
       )}
 
-      {/* Senior Bonus Modal */}
-      {showSeniorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 animate-fade-in">
-          <div className="bg-red-50 rounded-2xl w-full max-w-sm p-6 text-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
-            <h2 className="text-2xl font-bold text-red-600 mb-2">🎉 欢迎加入！</h2>
-            <p className="text-gray-700 mb-4">
-              您的老人账户已创建成功。
-            </p>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-red-100 mb-6">
-              <p className="text-sm text-gray-500 uppercase tracking-wide">养老补贴</p>
-              <p className="text-4xl font-black text-red-500 mt-1">+500 <span className="text-lg text-gray-400 font-normal">积分</span></p>
-            </div>
-            <Button
-              fullWidth
-              className="bg-red-500 hover:bg-red-600 text-white border-none"
-              onClick={handleSeniorClaim}
-            >
-              领取并开始
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Age Verification Modal */}
+      <AgeVerificationModal 
+        isOpen={showAgeModal}
+        age={detectedAge}
+        onClose={() => setShowAgeModal(false)}
+        onConfirm={handleSwitchToVolunteer}
+      />
+
     </div>
   );
 }

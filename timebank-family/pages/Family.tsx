@@ -1,19 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useUI } from '../context/UIContext';
 import { NavBar, Card, Button, Modal, Input } from '../components/UIComponents';
+
 import { Plus, UserCheck, Trash2, Camera, Repeat, Bell } from 'lucide-react';
 import { FamilyMember } from '../types';
 import { familyApi, BindFamilyRequest } from '../services/familyApi';
+import { authService } from '../services/authService';
 
 export default function Family() {
     const { state, dispatch } = useAuth();
+    const { showToast } = useUI();
+
     const [showBindModal, setShowBindModal] = useState(false);
-    const [bindForm, setBindForm] = useState({ phone: '', relation: '', proofImg: '' });
+    const [bindForm, setBindForm] = useState({ 
+        phone: '', 
+        relation: '', 
+        proofImgs: [] as Array<{ preview: string; remote: string }> 
+    });
+
     const [pendingCount, setPendingCount] = useState(0);
     const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
 
     // 加载亲情账号数据
     useEffect(() => {
@@ -45,8 +58,14 @@ export default function Family() {
         try {
             const isCurrentlyActing = state.isProxyMode && state.proxyTarget?.id === member.id;
 
+            // 退出代理时，先清除 proxyToken，确保退出请求使用普通 token
+            // 否则退出代理的接口会携带代理令牌，后端不认可导致 401
+            if (isCurrentlyActing) {
+                localStorage.removeItem('proxyToken');
+            }
+
             const result = await familyApi.toggleProxyMode({
-                parentId: isCurrentlyActing ? undefined : Number(member.id),
+                parentId: isCurrentlyActing ? undefined : member.id,
                 enable: !isCurrentlyActing
             });
 
@@ -89,31 +108,102 @@ export default function Family() {
 
     const handleSubmitBind = async () => {
         if (!bindForm.phone || !bindForm.relation) {
-            alert('请填写完整信息');
+            showToast('请填写完整信息', 'info');
             return;
         }
 
         try {
             setSubmitting(true);
+            if (bindForm.proofImgs.length < 2) {
+                showToast('请至少上传2张证明材料照片', 'error');
+                return;
+            }
+
+
             const params: BindFamilyRequest = {
                 phone: bindForm.phone,
                 relation: bindForm.relation,
-                proofImg: bindForm.proofImg || undefined
+                proofImg: bindForm.proofImgs.map(img => img.remote).filter(Boolean).join(',')
             };
+
 
             await familyApi.bindFamily(params);
 
             setShowBindModal(false);
-            setBindForm({ phone: '', relation: '', proofImg: '' });
-            alert('绑定申请已提交，等待审核');
+            setBindForm({ phone: '', relation: '', proofImgs: [] });
+            showToast('绑定申请已提交，等待审核', 'success');
 
             // 重新加载数据
             await loadFamilyData();
         } catch (err: any) {
-            alert(err.message || '提交失败，请重试');
+            showToast(err.message || '提交失败，请重试', 'error');
         } finally {
             setSubmitting(false);
         }
+
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const target = e.target;
+        const file = target?.files?.[0];
+        if (!file) return;
+
+        // 1. 生成本地预览 URL，确保 UI 秒级展示且永不因为上传后的替换而消失
+        let localUrl = '';
+        try {
+            localUrl = URL.createObjectURL(file);
+            // 此时 remote 为空，预览使用 localUrl
+            setBindForm(prev => ({ 
+                ...prev, 
+                proofImgs: [...prev.proofImgs, { preview: localUrl, remote: '' }] 
+            }));
+        } catch (err) {
+            console.error("Failed to create local preview:", err);
+        }
+
+        try {
+            setUploading(true);
+            // 2. 上传到后端获取正式 URL
+            const remoteUrl = await authService.uploadImage(file);
+            
+            if (remoteUrl) {
+                // 3. 更新对应的 remote 属性。注意：preview 保持为 localUrl
+                setBindForm(prev => ({
+                    ...prev,
+                    proofImgs: prev.proofImgs.map(img => 
+                        img.preview === localUrl ? { ...img, remote: remoteUrl } : img
+                    )
+                }));
+            } else {
+                throw new Error('未获取到有效的图片地址');
+            }
+
+        } catch (err: any) {
+            console.error("Upload process failed:", err);
+            // 上传失败时，从列表中彻底移除该预览项
+            setBindForm(prev => ({
+                ...prev,
+                proofImgs: prev.proofImgs.filter(img => img.preview !== localUrl)
+            }));
+            alert(err.message || '图片上传失败，请重新尝试');
+        } finally {
+            setUploading(false);
+            // 清理 input，确保可以重复触发
+            if (target) target.value = '';
+            // 延迟清理 blob，避免渲染冲突 (可选)
+            // setTimeout(() => URL.revokeObjectURL(localUrl), 1000);
+        }
+    };
+
+
+
+
+    const handleRemoveImage = (index: number) => {
+        setBindForm(prev => ({
+            ...prev,
+            proofImgs: prev.proofImgs.filter((_, i) => i !== index)
+
+        }));
     };
 
     return (
@@ -244,11 +334,48 @@ export default function Family() {
                     />
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">证明材料 (选填)</label>
-                        <div className="h-32 bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400">
-                            <Camera size={24} className="mb-1" />
-                            <span className="text-xs">上传户口本或合照</span>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">证明材料 (必填，至少2张)</label>
+                        <p className="text-xs text-gray-400 mb-2">请上传户口本首页及证明关系的相关页</p>
+                        
+                        <div className="grid grid-cols-3 gap-2 mb-2">
+                            {bindForm.proofImgs.map((img, idx) => (
+                                <div key={idx} className="aspect-square bg-gray-100 rounded-lg relative group overflow-hidden border border-gray-200">
+                                    <img src={img.preview} className="w-full h-full object-cover" />
+                                    <button
+                                        onClick={() => handleRemoveImage(idx)}
+                                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-80 hover:opacity-100 z-10"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                    {!img.remote && (
+                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+
+                            
+                            {/* Add More Button */}
+                             <div
+                                onClick={() => fileInputRef.current?.click()}
+                                className="aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-100 transition-colors"
+                            >
+                                {uploading ? (
+                                    <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                    <Plus size={20} />
+                                )}
+                            </div>
                         </div>
+                        
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                        />
                     </div>
 
                     <Button

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { NavBar, Button, Card, Modal, Input } from '../components/UIComponents';
-import { CheckCircle2, AlertTriangle, Star, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Star, Loader2, Camera, X } from 'lucide-react';
 import { taskApi, TaskReviewDetail } from '../services/taskApi';
 
 export default function TaskReview() {
@@ -19,7 +19,16 @@ export default function TaskReview() {
 
     // Appeal form
     const [appealReason, setAppealReason] = useState('');
+    const [appealFile, setAppealFile] = useState<File | null>(null);
+    const [appealPreview, setAppealPreview] = useState<string | null>(null);
+    
+    // Reply form
     const [replyContent, setReplyContent] = useState('');
+    const [replyFile, setReplyFile] = useState<File | null>(null);
+    const [replyPreview, setReplyPreview] = useState<string | null>(null);
+
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const replyFileInputRef = React.useRef<HTMLInputElement>(null);
 
     // Data states
     const [task, setTask] = useState<TaskReviewDetail | null>(null);
@@ -106,20 +115,49 @@ export default function TaskReview() {
         }
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'appeal' | 'reply') => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (type === 'appeal') {
+                setAppealFile(file);
+                const reader = new FileReader();
+                reader.onloadend = () => setAppealPreview(reader.result as string);
+                reader.readAsDataURL(file);
+            } else {
+                setReplyFile(file);
+                const reader = new FileReader();
+                reader.onloadend = () => setReplyPreview(reader.result as string);
+                reader.readAsDataURL(file);
+            }
+        }
+    };
+
     const handleAppeal = async () => {
         if (!state.currentUser || !task) return;
+        if (!appealFile) {
+            alert('请上传证据图片');
+            return;
+        }
 
         try {
             setSubmitting(true);
-            await taskApi.submitAppeal(task.taskId, state.currentUser.id.toString(), appealReason);
+            const { upload } = await import('../services/request');
+            
+            // 1. Upload image
+            const uploadRes = await upload<string>('/file/upload', appealFile);
+            const imageUrl = typeof uploadRes === 'string' ? uploadRes : (uploadRes as any).url || String(uploadRes);
+
+            // 2. Submit appeal
+            await taskApi.submitAppeal(task.taskId, state.currentUser.id.toString(), appealReason, imageUrl);
+            
             // 申诉成功后，更新本地任务状态为 4（申诉中）
             setTask({ ...task, status: 4 });
             setShowAppealModal(false);
             alert("申诉已提交，客服将介入处理。");
             navigate('/task/orders');
-        } catch (err) {
+        } catch (err: any) {
             console.error('申诉失败:', err);
-            alert('申诉提交失败，请重试');
+            alert(err.message || '申诉提交失败，请重试');
         } finally {
             setSubmitting(false);
         }
@@ -127,10 +165,22 @@ export default function TaskReview() {
 
     const handleReply = async () => {
         if (!state.currentUser || !task) return;
+        if (!replyFile) {
+            alert('请上传证据图片以支持您的回应');
+            return;
+        }
 
         try {
             setSubmitting(true);
-            await taskApi.replyAppeal(task.taskId, state.currentUser.id.toString(), replyContent);
+            const { upload } = await import('../services/request');
+
+            // 1. Upload image
+            const uploadRes = await upload<string>('/file/upload', replyFile);
+            const imageUrl = typeof uploadRes === 'string' ? uploadRes : (uploadRes as any).url || String(uploadRes);
+
+            // 2. Submit reply
+            await taskApi.replyAppeal(task.taskId, state.currentUser.id.toString(), replyContent, imageUrl);
+            
             // 更新本地状态显示回应
             setTask({
                 ...task,
@@ -140,10 +190,13 @@ export default function TaskReview() {
                     responseTime: new Date().toISOString()
                 }
             });
+            // 重新获取详情以显示新图片
+            const ad = await taskApi.getAppealDetail(task.taskId);
+            setAppealDetail(ad);
             alert("回应已提交");
-        } catch (err) {
+        } catch (err: any) {
             console.error('回应失败:', err);
-            alert('回应提交失败，请重试');
+            alert(err.message || '回应提交失败，请重试');
         } finally {
             setSubmitting(false);
         }
@@ -202,6 +255,19 @@ export default function TaskReview() {
                         <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">
                             {appealDetail?.reason || task.appeal?.reason || '加载申诉内容中...'}
                         </div>
+                        {/* Initiator Evidence Images */}
+                        {(appealDetail?.evidenceImg || task.appeal?.evidenceImg) && (
+                            <div className="mt-3">
+                                <p className="text-xs text-gray-500 mb-2">图片证据：</p>
+                                <div className="flex gap-2">
+                                    <img 
+                                        src={appealDetail?.evidenceImg || task.appeal?.evidenceImg} 
+                                        className="w-20 h-20 object-cover rounded border"
+                                        onClick={() => window.open(appealDetail?.evidenceImg || task.appeal?.evidenceImg)}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <p className="text-xs text-gray-400 mt-2 text-right">
                             提交时间: {task.appeal?.createTime ? new Date(task.appeal.createTime).toLocaleString() : '未知'}
                         </p>
@@ -218,6 +284,17 @@ export default function TaskReview() {
                                 <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">
                                     {task.appeal?.response || appealDetail?.defendantResponse}
                                 </div>
+                                {/* Defendant Evidence Images */}
+                                {(appealDetail?.defendantEvidenceImg || task.appeal?.defendantEvidenceImg) && (
+                                    <div className="mt-3">
+                                        <p className="text-xs text-gray-500 mb-2">响应证据：</p>
+                                        <img 
+                                            src={appealDetail?.defendantEvidenceImg || task.appeal?.defendantEvidenceImg} 
+                                            className="w-20 h-20 object-cover rounded border"
+                                            onClick={() => window.open(appealDetail?.defendantEvidenceImg || task.appeal?.defendantEvidenceImg)}
+                                        />
+                                    </div>
+                                )}
                                 <p className="text-xs text-gray-400 mt-2 text-right">
                                     回应时间: {(task.appeal?.responseTime || appealDetail?.responseTime) ? new Date(task.appeal?.responseTime || appealDetail?.responseTime!).toLocaleString() : '未知'}
                                 </p>
@@ -227,12 +304,49 @@ export default function TaskReview() {
                             (appealDetail && String(state.currentUser?.id) !== String(appealDetail.proposerId)) ? (
                                 <div className="space-y-3">
                                     <textarea
-                                        className="w-full border p-2 rounded-lg text-sm h-24 bg-white"
+                                        className="w-full border p-2 rounded-lg text-sm h-24 bg-white focus:ring-2 focus:ring-orange-500"
                                         placeholder="请针对申诉内容进行说明..."
                                         value={replyContent}
                                         onChange={e => setReplyContent(e.target.value)}
                                     />
-                                    <Button fullWidth onClick={handleReply} disabled={submitting || !replyContent}>
+                                    {/* Reply Evidence Upload */}
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-gray-700">响应证据 (必填)</p>
+                                        <div 
+                                            onClick={() => replyFileInputRef.current?.click()}
+                                            className="aspect-video bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center relative overflow-hidden"
+                                        >
+                                            {replyPreview ? (
+                                                <>
+                                                    <img src={replyPreview} className="w-full h-full object-cover" alt="Preview" />
+                                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                                        <div className="bg-white/80 p-2 rounded-full">
+                                                            <Camera size={24} className="text-gray-700" />
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); setReplyFile(null); setReplyPreview(null); }}
+                                                        className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Camera size={32} className="text-gray-300 mb-2" />
+                                                    <p className="text-xs text-gray-400">点击拍照或选择照片</p>
+                                                </>
+                                            )}
+                                        </div>
+                                        <input 
+                                            type="file" 
+                                            ref={replyFileInputRef} 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            onChange={(e) => handleFileChange(e, 'reply')}
+                                        />
+                                    </div>
+                                    <Button fullWidth onClick={handleReply} loading={submitting} disabled={submitting || !replyContent || !replyFile}>
                                         {submitting ? '提交中...' : '提交回应'}
                                     </Button>
                                     <p className="text-xs text-gray-400 text-center">提交后平台客服将进行公正裁决</p>
@@ -370,8 +484,51 @@ export default function TaskReview() {
                         value={appealReason}
                         onChange={e => setAppealReason(e.target.value)}
                     />
-                    <Button fullWidth onClick={handleAppeal} variant="danger" disabled={!appealReason}>
-                        提交申诉
+                    {/* Appeal Evidence Upload */}
+                    <div className="space-y-2">
+                        <p className="text-sm text-gray-700">上传凭证照片 (必填)</p>
+                        <div 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="aspect-video bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center relative overflow-hidden"
+                        >
+                            {appealPreview ? (
+                                <>
+                                    <img src={appealPreview} className="w-full h-full object-cover" alt="Preview" />
+                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                        <div className="bg-white/80 p-2 rounded-full">
+                                            <Camera size={24} className="text-gray-700" />
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setAppealFile(null); setAppealPreview(null); }}
+                                        className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <Camera size={32} className="text-gray-300 mb-2" />
+                                    <p className="text-xs text-gray-400">点击拍照或选择照片</p>
+                                </>
+                            )}
+                        </div>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept="image/*" 
+                            onChange={(e) => handleFileChange(e, 'appeal')}
+                        />
+                    </div>
+                    <Button 
+                        fullWidth 
+                        onClick={handleAppeal} 
+                        variant="danger" 
+                        loading={submitting}
+                        disabled={!appealReason || !appealFile || submitting}
+                    >
+                        {submitting ? '提交中...' : '提交申诉'}
                     </Button>
                 </div>
             </Modal>

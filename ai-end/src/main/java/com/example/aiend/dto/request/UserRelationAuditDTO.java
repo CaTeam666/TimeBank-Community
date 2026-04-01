@@ -15,7 +15,8 @@ import lombok.Data;
 public class UserRelationAuditDTO {
     
     /**
-     * 审核结果（1:通过 2:拒绝）
+     * 审核动作（1:通过 2:拒绝）
+     * 注意：后端会根据此动作映射到对应的业务状态码 (1:待老人确认, 3:已拒绝)
      */
     @NotNull(message = "审核状态不能为空")
     @Min(value = 1, message = "审核状态只能是1(通过)或2(拒绝)")

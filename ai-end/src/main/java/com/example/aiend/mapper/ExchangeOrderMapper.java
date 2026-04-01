@@ -41,4 +41,12 @@ public interface ExchangeOrderMapper extends BaseMapper<ExchangeOrder> {
             "WHERE o.user_id = #{userId} AND o.is_deleted = 0 " +
             "ORDER BY o.create_time DESC")
     List<MyExchangeOrderVO> selectMyOrders(@Param("userId") Long userId);
+
+    /**
+     * 查询今日的兑换总数
+     *
+     * @return 兑换数量
+     */
+    @Select("SELECT COUNT(*) FROM tb_exchange_order WHERE DATE(create_time) = CURDATE() AND is_deleted = 0")
+    Integer countTodayExchanges();
 }

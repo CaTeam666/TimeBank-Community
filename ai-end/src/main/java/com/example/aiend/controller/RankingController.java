@@ -1,6 +1,7 @@
 package com.example.aiend.controller;
 
 import com.example.aiend.common.Result;
+import com.example.aiend.common.scheduler.MonthlyRankingScheduler;
 import com.example.aiend.dto.request.RankingLogQueryDTO;
 import com.example.aiend.dto.request.RankingLogRetryDTO;
 import com.example.aiend.dto.response.PageResponseDTO;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class RankingController {
     
     private final RankingService rankingService;
+    private final MonthlyRankingScheduler monthlyRankingScheduler;
     
     /**
      * 获取奖励发放日志
@@ -51,5 +53,20 @@ public class RankingController {
         log.info("收到手动触发补发请求，参数：{}", retryDTO);
         rankingService.retryDistribution(retryDTO);
         return Result.success(null, "补发指令已提交");
+    }
+    
+    /**
+     * 手动触发月度排名统计
+     * 用于补跑指定月份的排名数据
+     * 注意：如果该月份已有5条数据，则数据已锁定，不允许修改
+     *
+     * @param period 期数 (格式: YYYY-MM，如 2026-02)
+     * @return 操作结果
+     */
+    @PostMapping("/statistics")
+    public Result<String> triggerStatistics(@RequestParam String period) {
+        log.info("手动触发月度排名统计，期数：{}", period);
+        String result = monthlyRankingScheduler.manualExecuteStatistics(period);
+        return Result.success(result, result);
     }
 }

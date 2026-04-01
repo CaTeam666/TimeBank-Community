@@ -16,5 +16,26 @@ export const userApi = {
             params.userId = userId;
         }
         return get<User>('/user/info', params);
+    },
+    dailyLogin: async (): Promise<{ code: number; message: string; data: string | null }> => {
+        // 由于 request.ts 统一在 code != 200 时抛出异常，这里使用独立的 fetch 处理以捕获 400/403 业务状态
+        const proxyToken = localStorage.getItem('proxyToken');
+        const normalToken = localStorage.getItem('token');
+        const token = proxyToken || normalToken;
+
+        const response = await fetch('/api/client/user/daily-login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token && { Authorization: `Bearer ${token}` }),
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
     }
 };

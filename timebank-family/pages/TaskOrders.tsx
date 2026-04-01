@@ -29,7 +29,9 @@ export default function TaskOrders() {
     const [tasks, setTasks] = useState<OrderTask[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const currentUser = state.currentUser;
+    // 代理模式下使用老人身份，正常模式用自己
+    const currentUser = state.isProxyMode && state.proxyTarget
+        ? state.proxyTarget : state.currentUser;
 
     // Map backend status to frontend status
     const mapStatus = (status: number): TaskStatus => {

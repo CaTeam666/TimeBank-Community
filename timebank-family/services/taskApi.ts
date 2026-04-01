@@ -111,13 +111,23 @@ export const taskApi = {
     },
 
     // 提交申诉
-    submitAppeal: async (taskId: string, userId: string, reason: string): Promise<boolean> => {
-        return post<boolean>('/task/appeal/submit', { taskId, userId, reason });
+    submitAppeal: async (taskId: string, userId: string, reason: string, evidenceImg: string): Promise<boolean> => {
+        return post<boolean>('/task/appeal/submit', { 
+            taskId: String(taskId), 
+            userId: String(userId), 
+            reason, 
+            evidenceImg 
+        });
     },
 
     // 提交申诉回应
-    replyAppeal: async (taskId: string, userId: string, content: string): Promise<boolean> => {
-        return post<boolean>('/task/appeal/reply', { taskId, userId, content });
+    replyAppeal: async (taskId: string, userId: string, content: string, evidenceImg: string): Promise<boolean> => {
+        return post<boolean>('/task/appeal/reply', { 
+            taskId: String(taskId), 
+            userId: String(userId), 
+            content, 
+            evidenceImg 
+        });
     },
 
     // 获取申诉详情
@@ -133,9 +143,11 @@ export interface AppealDetail {
     proposerName: string;
     proposerAvatar: string;
     reason: string;
+    evidenceImg: string;
     defendantName?: string;
     defendantAvatar?: string;
     defendantResponse?: string;
+    defendantEvidenceImg?: string;
     responseTime?: string;
     status: number;
     createTime: string;

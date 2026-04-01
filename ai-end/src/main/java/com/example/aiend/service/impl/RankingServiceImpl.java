@@ -14,6 +14,7 @@ import com.example.aiend.vo.RankingLogVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,10 +35,16 @@ import java.util.stream.Collectors;
 public class RankingServiceImpl implements RankingService {
     
     private final RankingLogMapper rankingLogMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
+    
+    /**
+     * Redis排名缓存Key前缀
+     */
+    private static final String RANKING_CACHE_KEY_PREFIX = "ranking:monthly:";
     
     /**
      * 获取奖励发放日志
-     * 根据接单数降序返回前5名，并根据排名赋值rank字段
+     * 优先从Redis查询，没有缓存则查数据库
      *
      * @param queryDTO 查询条件
      * @return 排名日志列表（前5名）
@@ -48,6 +55,62 @@ public class RankingServiceImpl implements RankingService {
         
         log.info("查询奖励发放日志，参数：{}", queryDTO);
         
+        String period = queryDTO.getPeriod();
+        
+        // 如果指定了期数，优先从Redis查询
+        if (period != null && !period.isEmpty()) {
+            List<RankingLogVO> cachedList = getFromRedis(period);
+            if (cachedList != null && !cachedList.isEmpty()) {
+                log.info("从Redis缓存中获取到 {} 条排名数据，期数: {}", cachedList.size(), period);
+                return PageResponseDTO.<RankingLogVO>builder()
+                        .list(cachedList)
+                        .total((long) cachedList.size())
+                        .build();
+            }
+        }
+        
+        // Redis没有缓存，查询数据库
+        return getFromDatabase(queryDTO);
+    }
+    
+    /**
+     * 从Redis缓存中获取排名数据
+     *
+     * @param period 期数
+     * @return 排名日志VO列表
+     */
+    private List<RankingLogVO> getFromRedis(String period) {
+        String cacheKey = RANKING_CACHE_KEY_PREFIX + period;
+        
+        try {
+            // 获取Redis List中的所有数据
+            List<Object> cachedData = redisTemplate.opsForList().range(cacheKey, 0, -1);
+            if (cachedData == null || cachedData.isEmpty()) {
+                log.debug("Redis缓存中没有期数 {} 的排名数据", period);
+                return null;
+            }
+            
+            // 转换为VO列表
+            return cachedData.stream()
+                    .filter(obj -> obj instanceof RankingLog)
+                    .map(obj -> {
+                        RankingLog rankingLog = (RankingLog) obj;
+                        return convertToVO(rankingLog);
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("从Redis获取排名数据失败，将查询数据库，错误: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 从数据库中获取排名数据
+     *
+     * @param queryDTO 查询条件
+     * @return 分页响应
+     */
+    private PageResponseDTO<RankingLogVO> getFromDatabase(RankingLogQueryDTO queryDTO) {
         // 构造查询条件
         LambdaQueryWrapper<RankingLog> wrapper = new LambdaQueryWrapper<>();
         
@@ -72,7 +135,7 @@ public class RankingServiceImpl implements RankingService {
             voList.add(vo);
         }
         
-        log.info("查询到 {} 条奖励发放日志（前5名）", voList.size());
+        log.info("从数据库查询到 {} 条奖励发放日志（前5名）", voList.size());
         
         // 返回结果
         return PageResponseDTO.<RankingLogVO>builder()

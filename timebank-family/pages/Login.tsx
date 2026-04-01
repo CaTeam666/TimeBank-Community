@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useUI } from '../context/UIContext';
 import { Input, Button, NavBar } from '../components/UIComponents';
+
+
 import { authService } from '../services/authService';
 
 export default function Login() {
   const navigate = useNavigate();
   const { dispatch } = useAuth();
+  const { showToast } = useUI();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,17 +24,16 @@ export default function Login() {
     try {
       const user = await authService.login(phone, password);
       dispatch({ type: 'LOGIN', payload: user });
-
+      showToast('登录成功，欢迎回来', 'success');
+      
       // Redirect based on role
-      if (user.role === 'SENIOR') {
-        // Maybe different dashboard in future, for now same
-      }
       navigate('/user/profile');
     } catch (error: any) {
-      alert(error.message || '登录失败，请检查手机号或密码');
+      showToast(error.message || '登录失败，请检查手机号或密码', 'error');
     } finally {
       setLoading(false);
     }
+
   };
 
   return (

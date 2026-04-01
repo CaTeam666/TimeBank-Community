@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMall } from '../context/MallContext';
 import { useAuth } from '../context/AuthContext';
+import { useUI } from '../context/UIContext';
 import { NavBar, Button, Card, Modal } from '../components/UIComponents';
+
 import { ShoppingBag, Minus, Plus, AlertCircle } from 'lucide-react';
 
 export default function MallDetail() {
@@ -10,6 +12,8 @@ export default function MallDetail() {
     const navigate = useNavigate();
     const { getProductById, createOrder } = useMall();
     const { state, dispatch } = useAuth();
+    const { showToast, showConfirm } = useUI();
+
 
     const product = getProductById(id || '');
     const [showCheckout, setShowCheckout] = useState(false);
@@ -49,15 +53,18 @@ export default function MallDetail() {
             setShowCheckout(false);
 
             // 3. Success Feedback
-            if (window.confirm("兑换成功！是否前往查看订单凭证？")) {
-                navigate('/mall/orders');
-            } else {
-                navigate(-1);
-            }
+            showConfirm({
+                title: '兑换成功',
+                content: '恭喜您兑换成功！是否立即前往查看订单凭证？',
+                confirmText: '去查看',
+                cancelText: '留在商城',
+                onConfirm: () => navigate('/mall/orders')
+            });
         } else {
-            alert("兑换失败，请稍后重试。");
+            showToast("兑换失败，请检查积分是否充足", "error");
         }
     };
+
 
     return (
         <div className="min-h-screen bg-gray-50 pb-24">

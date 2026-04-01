@@ -74,7 +74,8 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     if (currentUser) {
       // Demo logic: If user has an unread 'MONEY' message containing "奖励", show popup
-      const hasReward = userMessages.some(m => !m.isRead && m.type === 'MONEY' && m.title.includes('奖励'));
+      const hasReward = userMessages.some(m => !m.isRead && m.type === 'MONEY' && (m.title.includes('奖励') || m.title.includes('礼包')));
+
       if (hasReward) {
         // Delay slightly for effect
         const timer = setTimeout(() => setShowRewardPopup(true), 1000);
@@ -95,7 +96,8 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
   const closeRewardPopup = () => {
     setShowRewardPopup(false);
     // Mark the reward message as read so it doesn't show again immediately
-    const rewardMsg = userMessages.find(m => !m.isRead && m.type === 'MONEY' && m.title.includes('奖励'));
+    const rewardMsg = userMessages.find(m => !m.isRead && m.type === 'MONEY' && (m.title.includes('奖励') || m.title.includes('礼包')));
+
     if (rewardMsg) {
       markAsRead(rewardMsg.id);
     }
