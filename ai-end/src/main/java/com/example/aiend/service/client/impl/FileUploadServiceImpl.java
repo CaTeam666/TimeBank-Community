@@ -1,8 +1,10 @@
 package com.example.aiend.service.client.impl;
 
+import com.aliyun.oss.OSS;
 import com.example.aiend.common.exception.BusinessException;
 import com.example.aiend.dto.response.client.FileUploadResponseDTO;
 import com.example.aiend.service.client.FileUploadService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -10,11 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -27,19 +24,22 @@ import java.util.UUID;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class FileUploadServiceImpl implements FileUploadService {
-    
-    /**
-     * 文件上传根目录
-     */
+
+    private final OSS ossClient;
+
     @Value("${file.upload.path:uploads}")
     private String uploadPath;
-    
-    /**
-     * 文件访问URL前缀
-     */
+
     @Value("${file.upload.url-prefix:http://localhost:8080/uploads}")
-    private String urlPrefix;
+    private String fileUrlPrefix;
+
+    @Value("${aliyun.oss.bucket-name}")
+    private String bucketName;
+
+    @Value("${aliyun.oss.url-prefix}")
+    private String ossUrlPrefix;
     
     /**
      * 允许的文件类型
@@ -52,57 +52,98 @@ public class FileUploadServiceImpl implements FileUploadService {
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
     
     /**
-     * 上传文件
+     * 上传文件至阿里云 OSS
      *
      * @param file 文件对象
      * @return 文件上传响应（包含文件访问URL）
      */
     @Override
     public FileUploadResponseDTO uploadFile(MultipartFile file) {
-        log.info("开始上传文件，原始文件名：{}", file.getOriginalFilename());
-        
+        // 默认上传到本地
+        return uploadFile(file, "local");
+    }
+
+    @Override
+    public FileUploadResponseDTO uploadFile(MultipartFile file, String target) {
         // 验证文件
         validateFile(file);
-        
-        // 生成存储路径（按日期分目录，使用绝对路径）
-        String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        // 获取项目根目录的绝对路径
-        Path basePath = Paths.get(uploadPath).toAbsolutePath();
-        Path directoryPath = basePath.resolve(datePath);
-        
-        // 创建目录
-        try {
-            Files.createDirectories(directoryPath);
-            log.info("上传目录：{}", directoryPath);
-        } catch (IOException e) {
-            log.error("创建上传目录失败：{}", directoryPath, e);
-            throw new BusinessException(500, "文件上传失败");
+
+        if ("oss".equalsIgnoreCase(target)) {
+            return uploadToOss(file);
+        } else {
+            return uploadToLocal(file);
         }
-        
-        // 生成新文件名（UUID + 原始扩展名）
+    }
+
+    /**
+     * 上传文件到阿里云 OSS
+     */
+    private FileUploadResponseDTO uploadToOss(MultipartFile file) {
+        if (ossClient == null || bucketName.isEmpty() || ossUrlPrefix.isEmpty()) {
+            throw new BusinessException(500, "OSS 服务未配置或不可用");
+        }
+        log.info("开始上传文件到阿里云 OSS，文件名：{}", file.getOriginalFilename());
+        try {
+            String originalFilename = file.getOriginalFilename();
+            String extension = getFileExtension(originalFilename);
+            String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+            String newFilename = UUID.randomUUID().toString().replace("-", "") + "." + extension;
+            String ossKey = datePath + "/" + newFilename;
+
+            ossClient.putObject(bucketName, ossKey, file.getInputStream());
+
+            String finalUrl = ossUrlPrefix;
+            if (!finalUrl.endsWith("/")) {
+                finalUrl += "/";
+            }
+            finalUrl += ossKey;
+
+            log.info("文件上传 OSS 成功，URL：{}", finalUrl);
+            return FileUploadResponseDTO.builder().url(finalUrl).build();
+        } catch (IOException e) {
+            log.error("文件上传 OSS 失败", e);
+            throw new BusinessException(500, "文件上传失败 (OSS): " + e.getMessage());
+        }
+    }
+
+    /**
+     * 上传文件到本地磁盘
+     */
+    private FileUploadResponseDTO uploadToLocal(MultipartFile file) {
+        log.info("开始上传文件到本地磁盘，文件名：{}", file.getOriginalFilename());
+
         String originalFilename = file.getOriginalFilename();
+        String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
         String extension = getFileExtension(originalFilename);
         String newFilename = UUID.randomUUID().toString().replace("-", "") + "." + extension;
-        
-        // 保存文件（使用 Files.copy 从输入流复制，避免相对路径问题）
-        Path filePath = directoryPath.resolve(newFilename);
-        try (InputStream inputStream = file.getInputStream()) {
-            Files.copy(inputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
-            log.info("文件保存成功，路径：{}", filePath);
-        } catch (IOException e) {
-            log.error("文件保存失败", e);
-            throw new BusinessException(500, "文件上传失败");
+
+        // 拼接物理存储路径
+        File baseDir = new File(uploadPath).getAbsoluteFile();
+        File targetDir = new File(baseDir, datePath);
+        if (!targetDir.exists()) {
+            targetDir.mkdirs();
         }
-        
-        // 构建访问URL
-        String fileUrl = urlPrefix + "/" + datePath.replace(File.separator, "/") + "/" + newFilename;
-        log.info("文件上传成功，访问URL：{}", fileUrl);
-        
-        return FileUploadResponseDTO.builder()
-                .url(fileUrl)
-                .build();
+
+        File destFile = new File(targetDir, newFilename);
+
+        try {
+            file.transferTo(destFile.getAbsoluteFile());
+            log.info("文件上传本地成功，绝对路径：{}", destFile.getAbsolutePath());
+        } catch (IOException e) {
+            log.error("文件上传本地失败", e);
+            throw new BusinessException(500, "文件上传失败 (LOCAL): " + e.getMessage());
+        }
+
+        // 构建访问 URL
+        String finalUrl = fileUrlPrefix;
+        if (!finalUrl.endsWith("/")) {
+            finalUrl += "/";
+        }
+        finalUrl += datePath + "/" + newFilename;
+
+        return FileUploadResponseDTO.builder().url(finalUrl).build();
     }
-    
+
     /**
      * 验证文件
      *

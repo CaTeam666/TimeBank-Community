@@ -12,7 +12,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/ai_end?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:744322256qq}
+    password: ${DB_PASSWORD:change-me}
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       initial-size: 5
@@ -63,3 +63,14 @@ file:
   upload:
     path: uploads
     url-prefix: http://localhost:8080/uploads
+
+# 阿里云配置
+aliyun:
+  ocr:
+    access-key-id: ${ALIYUN_OCR_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_OCR_ACCESS_KEY_SECRET:}
+    endpoint: ocr-api.cn-hangzhou.aliyuncs.com
+  oss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    bucket-name: yuqi-timebank
+    url-prefix: https://yuqi-timebank.oss-cn-beijing.aliyuncs.com

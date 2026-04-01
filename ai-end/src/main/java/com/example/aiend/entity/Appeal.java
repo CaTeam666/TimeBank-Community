@@ -60,6 +60,12 @@ public class Appeal {
      */
     @TableField("response_time")
     private LocalDateTime responseTime;
+
+    /**
+     * 被申诉人证据图片URL
+     */
+    @TableField("defendant_evidence_img")
+    private String defendantEvidenceImg;
     
     /**
      * 证据图片URL（JSON数组或逗号分隔）

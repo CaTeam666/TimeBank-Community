@@ -74,9 +74,31 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createMessage(Long receiverId, String type, Long bizId, String title, String content) {
-        log.info("创建消息，接收人：{}，类型：{}，业务ID：{}", receiverId, type, bizId);
+        log.info("准备创建/更新消息，接收人：{}，类型：{}，业务ID：{}", receiverId, type, bizId);
         
-        // 1. 创建消息实体
+        // 1. 检查是否存在同类型且待处理的相同业务消息（幂等去重）
+        LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Message::getReceiverId, receiverId)
+                .eq(Message::getType, type)
+                .eq(Message::getBizId, bizId)
+                .eq(Message::getStatus, STATUS_PENDING)
+                .eq(Message::getIsDeleted, 0);
+        
+        Message existingMessage = messageMapper.selectOne(queryWrapper);
+        
+        if (existingMessage != null) {
+            log.info("发现已存在待处理消息，执行更新操作，消息ID：{}", existingMessage.getId());
+            existingMessage.setTitle(title);
+            existingMessage.setContent(content);
+            existingMessage.setUpdateTime(LocalDateTime.now());
+            messageMapper.updateById(existingMessage);
+            
+            // 同步更新到 Redis
+            syncMessageToRedis(existingMessage);
+            return existingMessage.getId();
+        }
+
+        // 2. 不存在则创建新消息实体
         Message message = Message.builder()
                 .receiverId(receiverId)
                 .type(type)
@@ -89,11 +111,11 @@ public class MessageServiceImpl implements MessageService {
                 .isDeleted(0)
                 .build();
         
-        // 2. 保存到数据库
+        // 3. 保存到数据库
         messageMapper.insert(message);
-        log.info("消息保存到数据库成功，消息ID：{}", message.getId());
+        log.info("新消息保存到数据库成功，消息ID：{}", message.getId());
         
-        // 3. 同步到 Redis 缓存
+        // 4. 同步到 Redis 缓存
         syncMessageToRedis(message);
         
         return message.getId();
@@ -419,7 +441,9 @@ public class MessageServiceImpl implements MessageService {
             if (allMessages == null) {
                 allMessages = new ArrayList<>();
             }
-            allMessages.add(0, messageVO);  // 新消息放在最前面
+            // 移除可能存在的同ID旧消息
+            allMessages.removeIf(m -> m.getId().equals(message.getId()));
+            allMessages.add(0, messageVO);  // 新消息/更新的消息放在最前面
             saveMessagesToRedis(allKey, allMessages);
             
             // 2. 更新用户类型消息缓存
@@ -428,7 +452,9 @@ public class MessageServiceImpl implements MessageService {
             if (typeMessages == null) {
                 typeMessages = new ArrayList<>();
             }
-            typeMessages.add(0, messageVO);  // 新消息放在最前面
+            // 移除可能存在的同ID旧消息
+            typeMessages.removeIf(m -> m.getId().equals(message.getId()));
+            typeMessages.add(0, messageVO);  // 新消息/更新的消息放在最前面
             saveMessagesToRedis(typeKey, typeMessages);
             
             log.info("消息同步到 Redis 成功，消息ID：{}，类型：{}", message.getId(), type);

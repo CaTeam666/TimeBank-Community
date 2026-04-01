@@ -56,6 +56,12 @@ public class Task {
     private Long publisherId;
     
     /**
+     * 代理人ID（子女代理发布时记录，非代理发布为null）
+     */
+    @TableField("proxy_user_id")
+    private Long proxyUserId;
+    
+    /**
      * 志愿者ID
      */
     @TableField("volunteer_id")

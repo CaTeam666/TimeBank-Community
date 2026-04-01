@@ -18,9 +18,11 @@ import com.example.aiend.service.UserRelationService;
 import com.example.aiend.vo.UserRelationVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import com.aliyun.oss.OSS;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -42,6 +44,13 @@ public class UserRelationServiceImpl implements UserRelationService {
     private final UserRelationMapper userRelationMapper;
     private final UserMapper userMapper;
     private final MessageService messageService;
+    private final OSS ossClient;
+    
+    @Value("${aliyun.oss.bucket-name}")
+    private String bucketName;
+    
+    @Value("${aliyun.oss.url-prefix}")
+    private String urlPrefix;
     
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
@@ -131,19 +140,23 @@ public class UserRelationServiceImpl implements UserRelationService {
             throw new BusinessException(400, "该申请已处理，无法重复操作");
         }
         
-        // 如果是拒绝，检查拒绝原因
-        if (RelationStatusEnum.REJECTED.getCode().equals(auditDTO.getStatus()) 
-                && !StringUtils.hasText(auditDTO.getRejectReason())) {
-            throw new BusinessException(400, "拒绝时必须填写拒绝原因");
+        // 根据 DTO 动作映射到业务状态码
+        // DTO: 1-通过, 2-拒绝
+        // Enum: 1-PENDING_ELDER_CONFIRM, 3-REJECTED
+        Integer targetStatus;
+        if (Integer.valueOf(1).equals(auditDTO.getStatus())) {
+            targetStatus = RelationStatusEnum.PENDING_ELDER_CONFIRM.getCode();
+        } else if (Integer.valueOf(2).equals(auditDTO.getStatus())) {
+            targetStatus = RelationStatusEnum.REJECTED.getCode();
+        } else {
+            throw new BusinessException(400, "非法审核状态");
         }
-        
+
         // 更新状态
-        // 如果管理员通过，状态改为“待老人确认”（status=1）
-        // 如果管理员拒绝，状态改为“已拒绝”（status=3）
-        relation.setStatus(auditDTO.getStatus());
+        relation.setStatus(targetStatus);
         
         // 如果是拒绝，设置拒绝原因
-        if (RelationStatusEnum.REJECTED.getCode().equals(auditDTO.getStatus())) {
+        if (RelationStatusEnum.REJECTED.getCode().equals(targetStatus)) {
             relation.setRejectReason(auditDTO.getRejectReason());
         }
         
@@ -201,10 +214,58 @@ public class UserRelationServiceImpl implements UserRelationService {
                 .parentId(relation.getParentId())
                 .parentName(parent != null ? parent.getRealName() : null)
                 .parentPhone(parent != null ? parent.getPhone() : null)
-                .proofImg(relation.getProofImg())
+                .proofImg(generateSignedUrls(relation.getProofImg()))
                 .status(relation.getStatus())
                 .rejectReason(relation.getRejectReason())
                 .createTime(createTime)
                 .build();
+    }
+    
+    /**
+     * 为多张证件照片（逗号分隔）生成签名 URL
+     *
+     * @param proofImg 原始 URL 字符串
+     * @return 带签名的 URL 字符串
+     */
+    private String generateSignedUrls(String proofImg) {
+        if (!StringUtils.hasText(proofImg)) {
+            return proofImg;
+        }
+        
+        String[] urls = proofImg.split(",");
+        return java.util.Arrays.stream(urls)
+                .map(this::generateSignedUrl)
+                .collect(Collectors.joining(","));
+    }
+    
+    /**
+     * 为单张照片生成带签名的临时访问 URL
+     *
+     * @param originalUrl 原始 URL
+     * @return 带签名的 URL（非 OSS 资源则返回原 URL）
+     */
+    private String generateSignedUrl(String originalUrl) {
+        if (!StringUtils.hasText(originalUrl) || !originalUrl.trim().startsWith(urlPrefix)) {
+            return originalUrl;
+        }
+        
+        try {
+            String trimmedUrl = originalUrl.trim();
+            // 提取 OSS 中的文件路径 (Key)
+            String ossKey = trimmedUrl.substring(urlPrefix.length());
+            if (ossKey.startsWith("/")) {
+                ossKey = ossKey.substring(1);
+            }
+            
+            // 设置过期时间为 30 分钟后 (审核员查看需要较长时间)
+            java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + 30 * 60 * 1000);
+            
+            // 生成签名 URL
+            java.net.URL signedUrl = ossClient.generatePresignedUrl(bucketName, ossKey, expiration);
+            return signedUrl.toString();
+        } catch (Exception e) {
+            log.warn("生成 OSS 签名 URL 失败，返回原始 URL: {}", originalUrl, e);
+            return originalUrl;
+        }
     }
 }

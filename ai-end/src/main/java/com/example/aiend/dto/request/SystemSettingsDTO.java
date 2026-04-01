@@ -28,7 +28,52 @@ public class SystemSettingsDTO {
     private Integer monthlyRank1Reward;
     
     /**
+     * 月度排行榜第二名奖金
+     */
+    private Integer monthlyRank2Reward;
+    
+    /**
+     * 月度排行榜第三名奖金
+     */
+    private Integer monthlyRank3Reward;
+    
+    /**
+     * 月度排行榜第四名奖金
+     */
+    private Integer monthlyRank4Reward;
+    
+    /**
+     * 月度排行榜第五名奖金
+     */
+    private Integer monthlyRank5Reward;
+    
+    /**
      * 任务发布预扣手续费比例 (%)
      */
     private Integer transactionFeePercent;
+    
+    /**
+     * 僵尸任务超时判定时长（小时）
+     */
+    private Integer zombieTaskTimeoutHours;
+    
+    /**
+     * 任务完成自动验收期限（天）
+     */
+    private Integer taskAutoAcceptDays;
+    
+    /**
+     * 老人亲属绑定数量上限（人）
+     */
+    private Integer familyBindingMaxLimit;
+    
+    /**
+     * 代理人每日操作次数限制（次）
+     */
+    private Integer proxyDailyActionLimit;
+    
+    /**
+     * 订单未核销自动取消时长（小时）
+     */
+    private Integer orderCancelTimeoutHours;
 }

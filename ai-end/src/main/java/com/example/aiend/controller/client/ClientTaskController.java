@@ -2,7 +2,6 @@ package com.example.aiend.controller.client;
 
 import com.example.aiend.common.Result;
 import com.example.aiend.common.exception.BusinessException;
-import com.example.aiend.common.util.UserContextUtil;
 import com.example.aiend.config.interceptor.ProxyAuthInterceptor;
 import com.example.aiend.dto.request.client.TaskAcceptDTO;
 import com.example.aiend.dto.request.client.TaskDeleteDTO;
@@ -76,14 +75,15 @@ public class ClientTaskController {
             HttpServletRequest request) {
         
         Long publisherId;
+        Long proxyUserId = null;
         
         // 优先检查代理模式
         Boolean isProxyMode = (Boolean) request.getAttribute(ProxyAuthInterceptor.ATTR_IS_PROXY_MODE);
         if (Boolean.TRUE.equals(isProxyMode)) {
-            // 代理模式：使用被代理人ID（老人ID）作为发布者
+            // 代理模式：使用被代理人ID（老人ID）作为发布者，记录代理人ID
             publisherId = (Long) request.getAttribute(ProxyAuthInterceptor.ATTR_PROXY_USER_ID);
-            Long realUserId = (Long) request.getAttribute(ProxyAuthInterceptor.ATTR_PROXY_REAL_USER_ID);
-            log.info("代理模式发布任务，被代理人ID：{}，实际操作人ID：{}", publisherId, realUserId);
+            proxyUserId = (Long) request.getAttribute(ProxyAuthInterceptor.ATTR_PROXY_REAL_USER_ID);
+            log.info("代理模式发布任务，被代理人ID：{}，实际操作人ID：{}", publisherId, proxyUserId);
         } else {
             // 非代理模式：优先使用请求体中的 publisherId，如果没有则使用请求头中的用户ID
             publisherId = publishDTO.getPublisherId();
@@ -99,7 +99,7 @@ public class ClientTaskController {
         
         log.info("任务发布请求，发布者ID：{}，任务标题：{}", publisherId, publishDTO.getTitle());
         
-        TaskPublishResponseDTO response = clientTaskService.publishTask(publishDTO, publisherId);
+        TaskPublishResponseDTO response = clientTaskService.publishTask(publishDTO, publisherId, proxyUserId);
         return Result.success(response, "发布成功");
     }
     
@@ -402,11 +402,24 @@ public class ClientTaskController {
      * @return 是否验收成功
      */
     @PostMapping("/task/review/confirm")
-    public Result<Boolean> confirmReview(@Valid @RequestBody ReviewConfirmDTO confirmDTO) {
-        log.info("确认验收请求，任务ID：{}，用户ID：{}", confirmDTO.getTaskId(), confirmDTO.getUserId());
+    public Result<Boolean> confirmReview(
+            @Valid @RequestBody ReviewConfirmDTO confirmDTO,
+            HttpServletRequest request) {
+        
+        Long publisherId;
+        
+        // 代理模式：代理人可验收代为发布的任务
+        Boolean isProxyMode = (Boolean) request.getAttribute(ProxyAuthInterceptor.ATTR_IS_PROXY_MODE);
+        if (Boolean.TRUE.equals(isProxyMode)) {
+            publisherId = (Long) request.getAttribute(ProxyAuthInterceptor.ATTR_PROXY_USER_ID);
+            Long realUserId = (Long) request.getAttribute(ProxyAuthInterceptor.ATTR_PROXY_REAL_USER_ID);
+            log.info("代理模式确认验收，被代理人ID：{}，实际操作人ID：{}，任务ID：{}", publisherId, realUserId, confirmDTO.getTaskId());
+        } else {
+            publisherId = Long.parseLong(confirmDTO.getUserId());
+            log.info("确认验收请求，任务ID：{}，用户ID：{}", confirmDTO.getTaskId(), publisherId);
+        }
         
         Long taskId = Long.parseLong(confirmDTO.getTaskId());
-        Long publisherId = Long.parseLong(confirmDTO.getUserId());
         
         boolean success = clientTaskService.confirmReview(taskId, publisherId, confirmDTO.getRating(), confirmDTO.getReview());
         
@@ -458,7 +471,7 @@ public class ClientTaskController {
         Long taskId = Long.parseLong(submitDTO.getTaskId());
         Long userId = Long.parseLong(submitDTO.getUserId());
         
-        boolean success = clientTaskService.submitAppeal(taskId, userId, submitDTO.getReason());
+        boolean success = clientTaskService.submitAppeal(taskId, userId, submitDTO.getReason(), submitDTO.getEvidenceImg());
         
         if (success) {
             return Result.success(true, "申诉提交成功");
@@ -482,7 +495,7 @@ public class ClientTaskController {
         Long taskId = Long.parseLong(replyDTO.getTaskId());
         Long userId = Long.parseLong(replyDTO.getUserId());
         
-        boolean success = clientTaskService.replyAppeal(taskId, userId, replyDTO.getContent());
+        boolean success = clientTaskService.replyAppeal(taskId, userId, replyDTO.getContent(), replyDTO.getEvidenceImg());
         
         if (success) {
             return Result.success(true, "回应提交成功");

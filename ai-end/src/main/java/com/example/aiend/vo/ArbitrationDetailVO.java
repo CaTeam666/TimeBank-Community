@@ -84,7 +84,17 @@ public class ArbitrationDetailVO {
     private String status;
     
     /**
-     * 证据图片URL列表
+     * 证据图片URL列表 (发起人)
      */
     private List<String> evidenceImages;
+
+    /**
+     * 被申诉人证据图片URL (原始字符串)
+     */
+    private String defendantEvidenceImg;
+
+    /**
+     * 被申诉人证据图片URL列表
+     */
+    private List<String> defendantEvidenceImages;
 }

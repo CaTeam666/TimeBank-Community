@@ -82,16 +82,30 @@ public class ClientAuthController {
     }
     
     /**
-     * 文件上传
-     * 用于上传身份证等图片文件
+     * 文件上传 (支持指定目标)
+     * 用于上传服务凭证等图片文件
      *
      * @param file 文件对象
+     * @param target 存储目标 (local 或 oss)
      * @return 文件访问URL
      */
     @PostMapping({"/upload", "/file/upload"})
-    public Result<FileUploadResponseDTO> uploadFile(@RequestParam("file") MultipartFile file) {
-        log.info("文件上传请求，文件名：{}", file.getOriginalFilename());
-        FileUploadResponseDTO response = fileUploadService.uploadFile(file);
+    public Result<FileUploadResponseDTO> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "target", required = false) String target) {
+        log.info("文件上传请求，文件名：{}，目标：{}", file.getOriginalFilename(), target);
+        FileUploadResponseDTO response = fileUploadService.uploadFile(file, target);
+        return Result.success(response);
+    }
+
+    /**
+     * OCR 专用文件上传 (强制上传至 OSS)
+     * 解决云端 OCR 服务无法访问本地 localhost 路径的问题
+     */
+    @PostMapping("/upload/ocr")
+    public Result<FileUploadResponseDTO> uploadFileForOcr(@RequestParam("file") MultipartFile file) {
+        log.info("OCR 专用上传请求，文件名：{}", file.getOriginalFilename());
+        FileUploadResponseDTO response = fileUploadService.uploadFile(file, "oss");
         return Result.success(response);
     }
 }

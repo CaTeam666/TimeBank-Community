@@ -49,6 +49,11 @@ public class AppealDetailDTO {
     private String reason;
     
     /**
+     * 申诉发起人证据图片URL
+     */
+    private String evidenceImg;
+    
+    /**
      * 被申诉方昵称
      */
     private String defendantName;
@@ -62,6 +67,11 @@ public class AppealDetailDTO {
      * 被申诉方回应
      */
     private String defendantResponse;
+    
+    /**
+     * 被申诉方证据图片URL
+     */
+    private String defendantEvidenceImg;
     
     /**
      * 回应时间

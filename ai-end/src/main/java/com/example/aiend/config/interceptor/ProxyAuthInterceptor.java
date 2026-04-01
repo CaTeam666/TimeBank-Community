@@ -2,17 +2,23 @@ package com.example.aiend.config.interceptor;
 
 import com.example.aiend.common.constant.ProxyWhitelistConstant;
 import com.example.aiend.common.util.ProxyTokenUtil;
+import com.example.aiend.dto.request.SystemSettingsDTO;
+import com.example.aiend.service.SettingsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 代理模式权限验证拦截器
@@ -37,6 +43,13 @@ public class ProxyAuthInterceptor implements HandlerInterceptor {
      * JSON 序列化工具
      */
     private final ObjectMapper objectMapper;
+    private final SettingsService settingsService;
+    private final RedisTemplate<String, Object> redisTemplate;
+    
+    /**
+     * 代理人每日操作计数 Redis Key 前缀
+     */
+    private static final String PROXY_DAILY_COUNT_PREFIX = "proxy:daily:";
     
     /**
      * 请求属性：被代理人ID（老人ID）- 白名单接口执行操作时使用此ID
@@ -94,6 +107,13 @@ public class ProxyAuthInterceptor implements HandlerInterceptor {
             request.setAttribute(ATTR_IS_WHITELIST, isWhitelist);
             
             if (isWhitelist) {
+                // 白名单接口：校验代理人每日操作次数
+                if (!checkProxyDailyLimit(payload.getRealUserId())) {
+                    log.warn("代理人每日操作次数已达上限，realUserId：{}，path：{}", payload.getRealUserId(), path);
+                    sendTooManyRequestsResponse(response);
+                    return false;
+                }
+                
                 // 白名单接口：使用被代理人ID（老人ID）
                 log.info("代理模式-白名单接口，使用被代理人ID：{}，实际操作人ID：{}，path：{}", 
                         payload.getUserId(), payload.getRealUserId(), path);
@@ -126,6 +146,54 @@ public class ProxyAuthInterceptor implements HandlerInterceptor {
         Map<String, Object> result = new HashMap<>();
         result.put("code", 401);
         result.put("message", message);
+        result.put("data", null);
+        result.put("timestamp", System.currentTimeMillis());
+        
+        response.getWriter().write(objectMapper.writeValueAsString(result));
+    }
+    
+    /**
+     * 校验代理人当日操作次数是否已达上限
+     * 使用 Redis 计数器，Key 为 proxy:daily:{childId}:{yyyy-MM-dd}，过期时间2天
+     *
+     * @param realUserId 实际操作人ID（子女ID）
+     * @return true=未超限可放行，false=已超限
+     */
+    private boolean checkProxyDailyLimit(Long realUserId) {
+        try {
+            SystemSettingsDTO settings = settingsService.getSettings();
+            int dailyLimit = settings.getProxyDailyActionLimit() != null ? settings.getProxyDailyActionLimit() : 5;
+            
+            String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            String redisKey = PROXY_DAILY_COUNT_PREFIX + realUserId + ":" + today;
+            
+            Long currentCount = redisTemplate.opsForValue().increment(redisKey, 1);
+            
+            // 首次设置时添加过期时间（2天，确保跨天清除）
+            if (currentCount != null && currentCount == 1) {
+                redisTemplate.expire(redisKey, 2, TimeUnit.DAYS);
+            }
+            
+            return currentCount != null && currentCount <= dailyLimit;
+        } catch (Exception e) {
+            log.error("校验代理人每日操作次数失败，放行处理", e);
+            return true; // Redis 异常时放行，不影响业务
+        }
+    }
+    
+    /**
+     * 发送 429 Too Many Requests 响应
+     *
+     * @param response HTTP 响应
+     * @throws IOException 写入响应时可能抛出的异常
+     */
+    private void sendTooManyRequestsResponse(HttpServletResponse response) throws IOException {
+        response.setStatus(429);
+        response.setContentType("application/json;charset=UTF-8");
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", 429);
+        result.put("message", "今日代理操作次数已达上限，请明天再试");
         result.put("data", null);
         result.put("timestamp", System.currentTimeMillis());
         

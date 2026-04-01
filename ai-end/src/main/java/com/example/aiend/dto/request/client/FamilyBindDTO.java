@@ -27,7 +27,9 @@ public class FamilyBindDTO {
     private String relation;
     
     /**
-     * 证明材料图片URL
+     * 证明材料图片URL列表，多个URL以逗号分隔
+     * 要求至少提供2张照片（如户口本首页及相关页）
      */
+    @NotBlank(message = "证明材料不能为空")
     private String proofImg;
 }

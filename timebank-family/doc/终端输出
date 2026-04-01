@@ -1,0 +1,39 @@
+
+2025-12-30 16:04:07 [http-nio-8080-exec-2] INFO  c.e.a.c.client.ClientTaskController - 任务发布请求，用户ID：null，任务标题：买衣服
+2025-12-30 16:04:07 [http-nio-8080-exec-2] INFO  c.e.a.s.c.impl.ClientTaskServiceImpl -  发布任务，发布者ID：1，任务标题：买衣服
+Creating a new SqlSession
+Registering transaction synchronization for SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+JDBC Connection [com.mysql.cj.jdbc.ConnectionImpl@6cfd9ef1] will be managed by Spring
+==>  Preparing: SELECT id,realName,password,id_card,nickname,role,phone,email,avatar,balance,status,create_time,registerTime,update_time,deleted FROM sys_user WHERE id=? AND deleted=0
+==> Parameters: 1(String)
+<==    Columns: id, realName, password, id_card, nickname, role, phone, email, avatar, balance, status, create_time, registerTime, update_time, deleted
+<==        Row: 1, 宋幼之, 123456, 111222333, 小宋, 子女代理人, 13355556666, null, null, 440, 1, 2025-12-21 22:33:42, 2025-12-21 22:33:42, 2025-12-30 16:01:02, 0
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4] from current transaction
+==>  Preparing: UPDATE sys_user SET realName=?, password=?, id_card=?, nickname=?, role=?, phone=?, balance=?, status=?, create_time=?, registerTime=?, update_time=? WHERE id=? AND deleted=0
+==> Parameters: 宋幼之(String), 123456(String), 111222333(String), 小宋(String), 子女代理人(String), 13355556666(String), 420(Integer), 1(Integer), 2025-12-21T22:33:42(LocalDateTime), 2025-12-21T22:33:42(LocalDateTime), 2025-12-30T16:04:07.427890100(LocalDateTime), 1(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+2025-12-30 16:04:07 [http-nio-8080-exec-2] INFO  c.e.a.s.c.impl.ClientTaskServiceImpl -  扣除时间币成功，用户ID：1，扣除：20，剩余：420
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4] from current transaction
+==>  Preparing: INSERT INTO tb_task ( title, description, type, price, publisher_id, status, location, service_time, create_time, is_deleted ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 买衣服(String), 买衣服(String), OTHER(String), 20(Integer), 1(Long), 0(Integer), 123(String), 2025-12-30T09:00(LocalDateTime), 2025-12-30T16:04:07.461165600(LocalDateTime), 0(Integer)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+2025-12-30 16:04:07 [http-nio-8080-exec-2] INFO  c.e.a.s.c.impl.ClientTaskServiceImpl -  任务发布成功，任务ID：10
+2025-12-30 16:04:07 [http-nio-8080-exec-2] INFO  c.e.a.s.c.impl.ClientTaskServiceImpl -  任务同步到 Redis 成功，任务ID：10
+Transaction synchronization committing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+Transaction synchronization deregistering SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+Transaction synchronization closing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@56dc4e4]
+2025-12-30 16:04:07 [http-nio-8080-exec-4] INFO  c.e.a.c.client.ClientTaskController - 获取用户余额请求，用户ID：null
+2025-12-30 16:04:07 [http-nio-8080-exec-4] INFO  c.e.a.s.c.impl.ClientTaskServiceImpl -  获取用户余额，用户ID：1
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@11d7a2cc] was not registered for synchronization because synchronization is not active
+JDBC Connection [com.mysql.cj.jdbc.ConnectionImpl@6cfd9ef1] will not be managed by Spring
+==>  Preparing: SELECT id,realName,password,id_card,nickname,role,phone,email,avatar,balance,status,create_time,registerTime,update_time,deleted FROM sys_user WHERE id=? AND deleted=0
+==> Parameters: 1(String)
+<==    Columns: id, realName, password, id_card, nickname, role, phone, email, avatar, balance, status, create_time, registerTime, update_time, deleted
+<==        Row: 1, 宋幼之, 123456, 111222333, 小宋, 子女代理人, 13355556666, null, null, 420, 1, 2025-12-21 22:33:42, 2025-12-21 22:33:42, 2025-12-30 16:04:07, 0
+<==      Total: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@11d7a2cc]

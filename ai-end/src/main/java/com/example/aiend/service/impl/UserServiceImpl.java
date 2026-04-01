@@ -9,6 +9,8 @@ import com.example.aiend.dto.request.UserQueryDTO;
 import com.example.aiend.dto.request.UserStatusUpdateDTO;
 import com.example.aiend.dto.response.PageResponseDTO;
 import com.example.aiend.entity.User;
+import com.example.aiend.entity.CoinLog;
+import com.example.aiend.mapper.CoinLogMapper;
 import com.example.aiend.mapper.UserMapper;
 import com.example.aiend.service.UserService;
 import com.example.aiend.vo.UserVO;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +39,7 @@ import java.util.stream.Collectors;
 public class UserServiceImpl implements UserService {
     
     private final UserMapper userMapper;
+    private final CoinLogMapper coinLogMapper;
     
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
@@ -156,6 +160,18 @@ public class UserServiceImpl implements UserService {
         }
         
         log.info("用户余额调整成功，用户ID：{}，当前余额：{}", id, newBalance);
+        
+        
+        // 记录系统调整流水
+        CoinLog coinLog = new CoinLog();
+        coinLog.setUserId(Long.parseLong(id));
+        coinLog.setAmount(adjustmentDTO.getAmount()); // 正数为增加，负数为减少
+        coinLog.setType(4); // 4：系统调整
+        coinLog.setCreateTime(LocalDateTime.now());
+        coinLog.setUpdateTime(LocalDateTime.now());
+        coinLogMapper.insert(coinLog);
+        
+        log.info("用户余额调整流水记录成功，用户ID：{}，流水金额：{}", id, adjustmentDTO.getAmount());
         
         // 返回当前余额
         Map<String, Integer> result = new HashMap<>();

@@ -1,0 +1,7 @@
+{
+  "name": "TimeBank Family",
+  "description": "一个代际互助的时间银行系统，具有用户认证、基于角色的账户（长者/志愿者）和亲情代理系统。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

@@ -1,22 +1,31 @@
 package com.example.aiend.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.aiend.common.enums.AuditStatusEnum;
 import com.example.aiend.common.exception.BusinessException;
 import com.example.aiend.dto.request.IdentityAuditQueryDTO;
 import com.example.aiend.dto.request.IdentityAuditResultDTO;
+import com.example.aiend.dto.request.SystemSettingsDTO;
 import com.example.aiend.dto.response.PageResponseDTO;
+import com.example.aiend.entity.CoinLog;
 import com.example.aiend.entity.IdentityAudit;
+import com.example.aiend.entity.User;
+import com.example.aiend.mapper.CoinLogMapper;
 import com.example.aiend.mapper.IdentityAuditMapper;
+import com.example.aiend.mapper.UserMapper;
 import com.example.aiend.service.IdentityAuditService;
+import com.example.aiend.service.SettingsService;
 import com.example.aiend.vo.IdentityAuditVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import com.aliyun.oss.OSS;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -35,6 +44,26 @@ import java.util.stream.Collectors;
 public class IdentityAuditServiceImpl implements IdentityAuditService {
     
     private final IdentityAuditMapper identityAuditMapper;
+    private final UserMapper userMapper;
+    private final CoinLogMapper coinLogMapper;
+    private final SettingsService settingsService;
+    private final OSS ossClient;
+    
+    @Value("${aliyun.oss.bucket-name}")
+    private String bucketName;
+    
+    @Value("${aliyun.oss.url-prefix}")
+    private String urlPrefix;
+    
+    /**
+     * 老人角色常量（数据库存储为中文）
+     */
+    private static final String ROLE_ELDER = "老人";
+    
+    /**
+     * 时间币流水类型 - 系统调整（赠送初始时间币）
+     */
+    private static final int COIN_TYPE_SYSTEM = 4;
     
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
@@ -121,7 +150,57 @@ public class IdentityAuditServiceImpl implements IdentityAuditService {
             throw new BusinessException(500, "审核结果提交失败");
         }
         
+        // 审核通过时，判断用户角色并赠送初始时间币
+        if (AuditStatusEnum.APPROVED.getCode().equals(statusEnum.getCode())) {
+            grantElderInitialCoinsIfElder(audit.getUserId());
+        }
+        
         log.info("审核结果提交成功，审核ID：{}，审核状态：{}", id, resultDTO.getStatus());
+    }
+    
+    /**
+     * 审核通过后，如果用户角色为老人，贠送初始时间币
+     *
+     * @param userId 用户ID（审核表中的用户ID）
+     */
+    private void grantElderInitialCoinsIfElder(Long userId) {
+        // 查询用户信息（sys_user.id 为 varchar，需要转换）
+        User user = userMapper.selectById(String.valueOf(userId));
+        if (user == null) {
+            log.warn("审核通过后查询用户失败，userId：{}", userId);
+            return;
+        }
+        
+        // 判断是否为老人角色
+        if (!ROLE_ELDER.equals(user.getRole())) {
+            log.info("用户角色非老人，不贠送初始时间币，userId：{}，role：{}", userId, user.getRole());
+            return;
+        }
+        
+        // 获取系统配置中的老人初始时间币数量
+        SystemSettingsDTO settings = settingsService.getSettings();
+        Integer initialCoins = settings.getElderInitialCoins();
+        
+        if (initialCoins == null || initialCoins <= 0) {
+            log.info("老人初始时间币配置为0，不贠送，userId：{}", userId);
+            return;
+        }
+        
+        // 更新用户余额：增加初始时间币
+        LambdaUpdateWrapper<User> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(User::getId, user.getId())
+                .setSql("balance = COALESCE(balance, 0) + " + initialCoins);
+        userMapper.update(null, updateWrapper);
+        
+        // 记录时间币流水
+        CoinLog coinLog = new CoinLog();
+        coinLog.setUserId(userId);
+        coinLog.setAmount(initialCoins);
+        coinLog.setType(COIN_TYPE_SYSTEM);
+        coinLog.setCreateTime(LocalDateTime.now());
+        coinLogMapper.insert(coinLog);
+        
+        log.info("老人实名审核通过，赠送初始时间币：{}，userId：{}", initialCoins, userId);
     }
     
     /**
@@ -138,17 +217,59 @@ public class IdentityAuditServiceImpl implements IdentityAuditService {
         // 转换状态码为状态字符串
         String status = AuditStatusEnum.fromCode(audit.getStatus()).getStatus();
         
+        // 查询用户角色以填充角色字段
+        User user = userMapper.selectById(String.valueOf(audit.getUserId()));
+        String role = (user != null) ? user.getRole() : null;
+        
+        // 为身份证照片生成带签名的 URL（30分钟有效）
+        String idCardFront = generateSignedUrl(audit.getIdCardFront());
+        String idCardBack = generateSignedUrl(audit.getIdCardBack());
+        
         return IdentityAuditVO.builder()
                 .id(String.valueOf(audit.getId()))
                 .userId(String.valueOf(audit.getUserId()))
                 .userName(audit.getRealName())
                 .submitTime(submitTime)
                 .ocrAge(audit.getAge())
-                .idCardFront(audit.getIdCardFront())
-                .idCardBack(audit.getIdCardBack())
+                .idCardFront(idCardFront)
+                .idCardBack(idCardBack)
                 .ocrName(audit.getRealName())
                 .ocrIdNumber(audit.getIdCard())
                 .status(status)
+                .role(role)
                 .build();
+    }
+    
+    /**
+     * 为私有 OSS 资源生成带签名的临时访问 URL
+     *
+     * @param originalUrl 原始 URL
+     * @return 带签名的 URL（非 OSS 资源则返回原 URL）
+     */
+    private String generateSignedUrl(String originalUrl) {
+        if (!StringUtils.hasText(originalUrl) || !originalUrl.startsWith(urlPrefix)) {
+            return originalUrl;
+        }
+        
+        try {
+            // 提取 OSS 中的文件路径 (Key)
+            String ossKey = originalUrl.substring(urlPrefix.length());
+            if (ossKey.startsWith("/")) {
+                ossKey = ossKey.substring(1);
+            }
+            
+            // 设置过期时间为 30 分钟后 (审核员查看需要较长时间)
+            java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + 30 * 60 * 1000);
+            
+            // 生成签名 URL
+            java.net.URL signedUrl = ossClient.generatePresignedUrl(bucketName, ossKey, expiration);
+            String finalUrl = signedUrl.toString();
+            
+            log.debug("已为证件照生成签名 URL: {}", finalUrl);
+            return finalUrl;
+        } catch (Exception e) {
+            log.warn("生成 OSS 签名 URL 失败，返回原始 URL: {}", originalUrl, e);
+            return originalUrl;
+        }
     }
 }

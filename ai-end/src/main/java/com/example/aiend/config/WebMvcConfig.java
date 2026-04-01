@@ -1,5 +1,6 @@
 package com.example.aiend.config;
 
+import com.example.aiend.config.interceptor.AdminAuthInterceptor;
 import com.example.aiend.config.interceptor.ProxyAuthInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private final ProxyAuthInterceptor proxyAuthInterceptor;
     
     /**
+     * 系统端认证拦截器
+     */
+    private final AdminAuthInterceptor adminAuthInterceptor;
+    
+    /**
      * 文件上传根目录
      */
     @Value("${file.upload.path:uploads}")
@@ -45,15 +51,34 @@ public class WebMvcConfig implements WebMvcConfigurer {
     
     /**
      * 配置拦截器
-     * 注册代理模式权限验证拦截器
+     * 注册代理模式拦截器和系统端认证拦截器
      *
      * @param registry 拦截器注册器
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 注册代理模式权限验证拦截器，拦截所有请求
+        // 注册系统端认证拦截器，拦截系统端接口
+        registry.addInterceptor(adminAuthInterceptor)
+                .addPathPatterns(
+                        "/users/**",       // 用户管理
+                        "/identity/**",    // 实名审核
+                        "/missions/**",    // 任务监控
+                        "/arbitration/**", // 纠纷仲裁
+                        "/evidence/**",    // 历史存证
+                        "/product/**",     // 商品管理
+                        "/order/**",       // 订单核销
+                        "/anomaly/**",     // 异常数据
+                        "/settings/**",    // 系统设置
+                        "/ranking/**",     // 奖励监控
+                        "/relations/**"    // 亲情绑定
+                )
+                .excludePathPatterns(
+                        "/auth/**"         // 排除登录接口
+                );
+        
+        // 注册代理模式权限验证拦截器，拦截客户端接口
         registry.addInterceptor(proxyAuthInterceptor)
-                .addPathPatterns("/**")
+                .addPathPatterns("/client/**")
                 .excludePathPatterns(
                         "/uploads/**",     // 排除静态资源
                         "/error/**",       // 排除错误页面

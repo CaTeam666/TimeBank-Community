@@ -32,4 +32,11 @@ public class AppealReplyDTO {
      */
     @NotBlank(message = "回应内容不能为空")
     private String content;
+    
+    /**
+     * 回应证据图片URL
+     */
+    @NotBlank(message = "响应证据图片不能为空")
+    @JsonAlias({"evidence_img", "evidenceImg"})
+    private String evidenceImg;
 }

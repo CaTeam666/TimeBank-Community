@@ -1,0 +1,22 @@
+# IDE
+.vscode/
+.idea/
+
+# Node / frontend builds
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.temp_clone2/
+
+# Java / Maven builds
+**/target/
+**/*.log
+
+# Runtime uploads and generated files
+ai-end/uploads/
+
+# Local env files
+**/.env.local
+
+# Nested git backups should stay outside the monorepo
+**/.git.disabled/

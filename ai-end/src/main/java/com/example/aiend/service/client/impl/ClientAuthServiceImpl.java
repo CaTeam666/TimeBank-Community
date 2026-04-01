@@ -158,6 +158,20 @@ public class ClientAuthServiceImpl implements ClientAuthService {
             throw new BusinessException(400, "该真实姓名已被注册");
         }
         
+        // 根据身份证号计算年龄并校验身份
+        int age = 0;
+        try {
+            String birthYear = registerRequest.getIdCard().substring(6, 10);
+            age = LocalDateTime.now().getYear() - Integer.parseInt(birthYear);
+        } catch (Exception e) {
+            log.warn("计算年龄失败，idCard: {}", registerRequest.getIdCard());
+        }
+        
+        // 年龄校验：不满60岁不能以老人身份注册
+        if ("SENIOR".equals(registerRequest.getRole()) && age < 60) {
+            throw new BusinessException(400, "不满60岁不能以老人身份注册");
+        }
+        
         // 创建用户记录（状态为禁用，等待审核通过后启用）
         User user = new User();
         user.setPhone(registerRequest.getPhone());
@@ -183,17 +197,9 @@ public class ClientAuthServiceImpl implements ClientAuthService {
         audit.setIdCardFront(registerRequest.getIdCardFront());
         audit.setIdCardBack(registerRequest.getIdCardBack());
         audit.setStatus(0);  // 待审核
+        audit.setAge(age);
         audit.setCreateTime(LocalDateTime.now());
         audit.setIsDeleted(0);
-        
-        // 根据身份证号计算年龄
-        try {
-            String birthYear = registerRequest.getIdCard().substring(6, 10);
-            int age = LocalDateTime.now().getYear() - Integer.parseInt(birthYear);
-            audit.setAge(age);
-        } catch (Exception e) {
-            log.warn("计算年龄失败，idCard: {}", registerRequest.getIdCard());
-        }
         
         identityAuditMapper.insert(audit);
         log.info("创建审核记录成功，auditId: {}, userId: {}", audit.getId(), user.getId());

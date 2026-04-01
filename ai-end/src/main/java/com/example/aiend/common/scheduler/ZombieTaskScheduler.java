@@ -2,8 +2,12 @@ package com.example.aiend.common.scheduler;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.aiend.common.enums.TaskStatusEnum;
+import com.example.aiend.dto.request.SystemSettingsDTO;
 import com.example.aiend.entity.Task;
+import com.example.aiend.entity.TaskEvidence;
+import com.example.aiend.mapper.TaskEvidenceMapper;
 import com.example.aiend.mapper.TaskMapper;
+import com.example.aiend.service.SettingsService;
 import com.example.aiend.service.impl.AnomalyServiceImpl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +39,8 @@ public class ZombieTaskScheduler {
     private final TaskMapper taskMapper;
     private final AnomalyServiceImpl anomalyService;
     private final ObjectMapper objectMapper;
+    private final SettingsService settingsService;
+    private final TaskEvidenceMapper taskEvidenceMapper;
 
     /**
      * Redis 任务分类 ZSet Key 前缀
@@ -55,43 +61,52 @@ public class ZombieTaskScheduler {
         log.info("开始执行僵尸任务检测...");
 
         try {
+            // 从系统配置动态读取超时时长
+            SystemSettingsDTO settings = settingsService.getSettings();
+            int timeoutHours = settings.getZombieTaskTimeoutHours() != null ? settings.getZombieTaskTimeoutHours() : 24;
+            
             LocalDateTime now = LocalDateTime.now();
-            // 服务开始时间前1小时阈值
-            LocalDateTime warningThreshold = now.plusHours(1);
+            // 超时阈值 = 当前时间 - 配置的超时小时数
+            LocalDateTime timeoutThreshold = now.minusHours(timeoutHours);
+            
+            log.info("僵尸任务超时阈值：{}小时，截止时间：{}", timeoutHours, timeoutThreshold);
             
             // 1. 先检查Redis缓存中的任务（获取待接单任务ID列表，用于日志记录）
-            checkRedisForZombieTasks(now, warningThreshold);
+            checkRedisForZombieTasks(now, timeoutThreshold);
 
-            // 2. 再检查数据库中的任务（确保完整性）
-            List<Task> zombieTasks = checkDatabaseForZombieTasks(now, warningThreshold);
-
-            // 3. 处理到达服务时间但未被接单的任务（自动取消）
+            // 2. 查询并处理超时未接单的任务（状态为 0/1，超时自动取消）
+            List<Task> zombieTasks = checkDatabaseForZombieTasks(timeoutThreshold);
             int cancelledCount = 0;
             for (Task task : zombieTasks) {
-                // 检查是否已到达服务时间
-                if (task.getServiceTime() != null && task.getServiceTime().isBefore(now) || task.getServiceTime().isEqual(now)) {
-                    // 到达服务时间，自动取消
-                    boolean success = anomalyService.processZombieTask(task);
-                    if (success) {
-                        cancelledCount++;
-                    }
+                boolean success = anomalyService.processZombieTask(task);
+                if (success) {
+                    cancelledCount++;
                 }
             }
+            log.info("僵尸任务检测完成，超时任务数：{}，自动取消任务数：{}", zombieTasks.size(), cancelledCount);
 
-            // 4. 记录检测到但未取消的异常任务（预警）
-            int warningCount = 0;
-            for (Task task : zombieTasks) {
-                if (task.getServiceTime() != null && task.getServiceTime().isAfter(now)) {
-                    // 服务时间未到，但距离服务时间不足1小时
-                    if (task.getServiceTime().isBefore(warningThreshold)) {
-                        log.warn("预警：任务即将成为僵尸任务，任务ID：{}，标题：{}，服务时间：{}",
-                                task.getId(), task.getTitle(), task.getServiceTime());
-                        warningCount++;
-                    }
+            // 3. 查询并处理超时未验收的任务（状态为 2，超时 1 小时自动完成）
+            LocalDateTime autoConfirmThreshold = now.minusHours(1);
+            List<Task> pendingConfirmTasks = checkDatabaseForAutoConfirmTasks(autoConfirmThreshold);
+            int autoConfirmedCount = 0;
+            for (Task task : pendingConfirmTasks) {
+                boolean success = anomalyService.processAutoConfirmTask(task);
+                if (success) {
+                    autoConfirmedCount++;
                 }
             }
+            log.info("自动验收检测完成，待验收超时任务数：{}，自动完成任务数：{}", pendingConfirmTasks.size(), autoConfirmedCount);
 
-            log.info("僵尸任务检测完成，预警任务数：{}，自动取消任务数：{}", warningCount, cancelledCount);
+            // 5. 查询并处理进行中由于未签到而超时的任务（状态为 1，已过服务时间）
+            List<Task> pendingNoCheckInTasks = checkDatabaseForNoCheckInTasks(now);
+            int autoCancelledCount = 0;
+            for (Task task : pendingNoCheckInTasks) {
+                boolean success = anomalyService.processNoCheckInTask(task);
+                if (success) {
+                    autoCancelledCount++;
+                }
+            }
+            log.info("未签到取消扫描完成，未签到超时任务数：{}，自动取消任务数：{}", pendingNoCheckInTasks.size(), autoCancelledCount);
 
         } catch (Exception e) {
             log.error("僵尸任务检测失败", e);
@@ -153,29 +168,88 @@ public class ZombieTaskScheduler {
     }
 
     /**
-     * 从数据库中检测异常任务
-     * 查找：状态为待接单、无志愿者接单、服务时间在当前时间到1小时后之间的任务
+     * 从数据库中检测超时未接单的僵尸任务
+     * 查找：状态为待接单、无志愿者接单、创建时间早于超时阈值的任务
      *
-     * @param now              当前时间
-     * @param warningThreshold 预警阈值时间（服务时间前1小时）
+     * @param timeoutThreshold 超时阈值时间（创建时间早于此时间的任务视为僵尸任务）
      * @return 异常任务列表
      */
-    private List<Task> checkDatabaseForZombieTasks(LocalDateTime now, LocalDateTime warningThreshold) {
+    private List<Task> checkDatabaseForZombieTasks(LocalDateTime timeoutThreshold) {
         try {
             LambdaQueryWrapper<Task> queryWrapper = new LambdaQueryWrapper<>();
             queryWrapper.eq(Task::getStatus, TaskStatusEnum.PENDING.getCode())  // 待接单状态
                     .isNull(Task::getVolunteerId)  // 无志愿者接单
-                    .isNotNull(Task::getServiceTime)  // 有服务时间
-                    .le(Task::getServiceTime, warningThreshold)  // 服务时间 <= 当前时间 + 1小时
-                    .orderByAsc(Task::getServiceTime);
+                    .le(Task::getCreateTime, timeoutThreshold)  // 创建时间 <= 超时阈值
+                    .orderByAsc(Task::getCreateTime);
 
             List<Task> zombieTasks = taskMapper.selectList(queryWrapper);
-            log.info("从数据库中检测到 {} 个异常任务（服务时间前1小时内未被接单）", zombieTasks.size());
+            log.info("从数据库中检测到 {} 个超时未接单的僵尸任务", zombieTasks.size());
 
             return zombieTasks;
 
         } catch (Exception e) {
             log.error("从数据库检测僵尸任务失败", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 从数据库中检测超时未验收的任务
+     * 查找：状态为待验收（2）、更新时间早于超时阈值的任务
+     *
+     * @param threshold 超时阈值时间（更新时间早于此时间的任务视为超时）
+     * @return 待验收超时任务列表
+     */
+    private List<Task> checkDatabaseForAutoConfirmTasks(LocalDateTime threshold) {
+        try {
+            LambdaQueryWrapper<Task> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(Task::getStatus, TaskStatusEnum.WAITING_CONFIRM.getCode())
+                    .le(Task::getUpdateTime, threshold)
+                    .orderByAsc(Task::getUpdateTime);
+
+            List<Task> tasks = taskMapper.selectList(queryWrapper);
+            log.info("从数据库中检测到 {} 个超时未验收的任务", tasks.size());
+            return tasks;
+        } catch (Exception e) {
+            log.error("从数据库检测待验收超时任务失败", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 从数据库中检测超时未签到的进行中任务
+     * 查找：状态为进行中（1）、服务时间早于当前时间、且存证表中无签到记录的任务
+     *
+     * @param now 当前时间
+     * @return 未签到超时任务列表
+     */
+    private List<Task> checkDatabaseForNoCheckInTasks(LocalDateTime now) {
+        try {
+            // 1. 查询所有状态为进行中(1)且服务时间已过的任务
+            LambdaQueryWrapper<Task> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(Task::getStatus, TaskStatusEnum.IN_PROGRESS.getCode())
+                    .le(Task::getServiceTime, now)
+                    .orderByAsc(Task::getServiceTime);
+
+            List<Task> candidateTasks = taskMapper.selectList(queryWrapper);
+            List<Task> resultTasks = new ArrayList<>();
+
+            // 2. 过滤掉已有签到记录的任务
+            for (Task task : candidateTasks) {
+                LambdaQueryWrapper<TaskEvidence> evidenceWrapper = new LambdaQueryWrapper<>();
+                evidenceWrapper.eq(TaskEvidence::getTaskId, task.getId())
+                        .isNotNull(TaskEvidence::getCheckInTime);
+                
+                Long count = taskEvidenceMapper.selectCount(evidenceWrapper);
+                if (count == 0) {
+                    resultTasks.add(task);
+                }
+            }
+
+            log.info("从数据库中检测到 {} 个未签到且超时的进行中任务", resultTasks.size());
+            return resultTasks;
+        } catch (Exception e) {
+            log.error("从数据库检测未签到超时任务失败", e);
             return new ArrayList<>();
         }
     }

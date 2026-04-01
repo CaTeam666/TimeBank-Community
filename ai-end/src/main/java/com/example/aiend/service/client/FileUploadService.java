@@ -18,4 +18,13 @@ public interface FileUploadService {
      * @return 文件上传响应（包含文件访问URL）
      */
     FileUploadResponseDTO uploadFile(MultipartFile file);
+
+    /**
+     * 上传文件（支持指定存储目标）
+     *
+     * @param file 文件对象
+     * @param target 存储目标 (local 或 oss)
+     * @return 文件上传响应（包含文件访问URL）
+     */
+    FileUploadResponseDTO uploadFile(MultipartFile file, String target);
 }
