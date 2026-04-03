@@ -1,56 +1,56 @@
-# TimeBank Admin Dashboard
+# 时间银行管理端
 
-This package is the admin-side web application for the TimeBank Community project. It is used by operators and reviewers to manage users, tasks, disputes, system settings, reward workflows, and dashboard metrics.
+该子项目是时间银行社区平台的后台管理系统，面向运营人员、审核人员和管理员，主要用于处理用户审核、任务管理、争议仲裁、系统配置、奖励发放和数据看板等后台工作。
 
-## Scope
+## 功能范围
 
-The admin dashboard focuses on internal operations rather than resident-facing interactions.
+管理端主要服务于平台内部运营，不直接面向居民用户。
 
-Main modules include:
+核心模块包括：
 
-- Dashboard and KPI views
-- Identity audit and review workflows
-- Family binding review
-- Task monitoring and zombie task logs
-- Arbitration and evidence archive
-- Product and order management
-- Ranking and reward monitoring
-- System settings and operational controls
+- 首页看板与关键指标展示
+- 实名认证审核流程
+- 家庭绑定审核
+- 任务监控与僵尸任务日志
+- 仲裁处理与证据归档
+- 商品与兑换订单管理
+- 排行榜与奖励监控
+- 系统配置与运营控制台
 
-## Tech Stack
+## 技术栈
 
 - React
 - TypeScript
 - Vite
-- REST API integration with the Spring Boot backend in `../ai-end`
+- 通过 REST API 对接 `../ai-end` 后端服务
 
-## Local Development
+## 本地开发
 
 ```bash
 npm install
 npm run dev
 ```
 
-Default local port:
+默认本地端口：
 
 - `3002`
 
-The Vite dev server proxies backend requests to:
+Vite 开发服务器会将接口请求代理到：
 
 - `http://localhost:8080`
 
-## Directory Notes
+## 目录说明
 
 ```text
 timebank-backend/
-├── components/   # shared layout and UI components
-├── pages/        # admin pages
-├── services/     # API wrappers
-├── utils/        # auth and request helpers
-└── doc/          # interface and implementation docs
++-- components/   # 通用布局与界面组件
++-- pages/        # 管理端页面
++-- services/     # 接口封装
++-- utils/        # 鉴权与请求工具
+\-- doc/          # 接口与实现文档
 ```
 
-## Related Applications
+## 关联项目
 
-- Backend: `../ai-end`
-- User client: `../timebank-family`
+- 后端服务：`../ai-end`
+- 用户端：`../timebank-family`

@@ -1,72 +1,67 @@
-# 时间银行 - 用户端
+# 时间银行用户端
 
-这是时间银行项目的**用户端应用**，基于 React + TypeScript + Vite 构建。
+该子项目是时间银行社区平台的居民用户端应用，基于 React + TypeScript + Vite 构建，面向普通用户和家庭成员，提供任务参与、亲情代理、商城兑换、排行榜、消息通知等核心能力。
 
 ## 项目简介
 
-时间银行用户端是一个家庭任务管理与积分兑换系统，包含以下核心功能：
+用户端围绕社区服务和家庭协助场景展开，当前主要功能包括：
 
-- 👤 **用户认证**：登录、注册、家庭管理
-- 📋 **任务系统**：任务发布、接单、执行、审核
-- 🏪 **爱心超市**：积分商城、商品兑换
-- 📊 **排行榜**：家庭成员积分排名
-- 💬 **消息通知**：系统消息推送
-- 🤖 **AI助手**：集成 Gemini AI 智能辅助
+- 用户注册、登录与个人信息维护
+- 任务发布、接单、执行、评价
+- 亲情代理与家庭成员绑定
+- 爱心商城与商品兑换
+- 排行榜与激励展示
+- 消息通知与个人中心
 
 ## 本地运行
 
-**前置要求：** Node.js >= 16
+前置要求：
 
-1. 安装依赖：
-   ```bash
-   npm install
-   ```
+- Node.js 16 及以上
 
-2. 配置环境变量：
-   - 在项目根目录创建 `.env.local` 文件
-   - 添加 Gemini API Key：
-     ```
-     GEMINI_API_KEY=你的API密钥
-     ```
+启动方式：
 
-3. 启动应用：
-   ```bash
-   npm run dev
-   ```
+```bash
+npm install
+npm run dev
+```
 
-4. 打开浏览器访问：`http://localhost:5173`
+默认访问地址：
+
+- `http://localhost:3000`
+
+如需本地环境变量，可在项目根目录创建 `.env.local`。
 
 ## 项目结构
 
-```
+```text
 timebank-family/
-├── components/      # 公共组件
-├── context/         # 全局状态管理
-├── pages/           # 页面组件
-├── services/        # API服务封装
-├── doc/             # 接口文档
-├── types.ts         # TypeScript类型定义
-└── constants.ts     # 常量配置
++-- components/    # 公共组件
++-- context/       # 全局状态管理
++-- pages/         # 页面组件
++-- services/      # 接口服务封装
++-- doc/           # 接口文档
++-- types.ts       # TypeScript 类型定义
+\-- constants.ts   # 常量配置
 ```
 
 ## 技术栈
 
-- **前端框架**：React 18
-- **语言**：TypeScript
-- **构建工具**：Vite
-- **状态管理**：React Context API
-- **HTTP客户端**：Axios
-- **AI集成**：Google Gemini AI
+- React 18
+- TypeScript
+- Vite
+- React Context API
+- Axios
 
-## 相关项目
+## 关联项目
 
-- **管理端**：[待补充链接]
-- **后端服务**：[待补充链接]
+- 管理端：`../timebank-backend`
+- 后端服务：`../ai-end`
 
 ## 开发者
 
-CaTeam666
+- CaTeam666
 
 ## 许可证
 
-MIT License
+本项目遵循 MIT License。
